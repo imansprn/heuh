@@ -2,10 +2,10 @@
   "name": "heuh",
   "version": "1.0.0",
   "description": "A Node.js application that integrates Sentry webhooks with Google Chat",
-  "main": "src/app.js",
+  "main": "src/server.js",
   "scripts": {
-    "start": "node src/app.js",
-    "dev": "nodemon src/app.js",
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
     "test": "jest",
     "test:coverage": "jest --coverage --coverageReporters=text --coverageReporters=lcov",
     "lint": "eslint .",
@@ -25,6 +25,7 @@
     "dotenv": "^16.4.5",
     "express": "^4.18.3",
     "helmet": "^7.1.0",
+    "http-status": "^2.1.0",
     "joi": "^17.12.2",
     "morgan": "^1.10.0",
     "xss-clean": "^0.1.4"

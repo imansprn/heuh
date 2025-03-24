@@ -10,7 +10,8 @@ const path = require('path');
 const routes = require('./routes');
 const { errorMiddleware } = require('./middlewares');
 const express = require('express');
-const { config, logger, morgan} = require('./config');
+const morgan = require('morgan');
+const { config } = require('./config');
 
 class Server {
     #host;
@@ -18,7 +19,7 @@ class Server {
     #app = express();
 
     constructor(options = {
-        port: 8080,
+        port: process.env.PORT || 3000,
         host: '0.0.0.0',
         modules: [],
         socket: null,
@@ -30,8 +31,7 @@ class Server {
 
     defaults() {
         if (config.env !== 'test') {
-            this.#app.use(morgan.successHandler);
-            this.#app.use(morgan.errorHandler);
+            this.#app.use(morgan('combined'));
         }
 
         // set security HTTP headers
@@ -83,7 +83,7 @@ class Server {
             server.listen(this.#port, (err) => {
                 if (err) return reject(err);
 
-                logger.info(`${config.name.toUpperCase()} with PID ${process.pid} is listening on port ${this.#port}`);
+                console.log(`Server is listening on port ${this.#port}`);
                 return resolve(this.#app);
             });
         });

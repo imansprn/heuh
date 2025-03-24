@@ -13,7 +13,7 @@ const sendToGoogleChat = async (message) => {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ text: message })
+            body: typeof message === 'string' ? message : JSON.stringify(message)
         });
 
         if (!response.ok) {

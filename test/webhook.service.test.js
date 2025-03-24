@@ -32,7 +32,18 @@ describe('Webhook Service', () => {
 
     describe('sendToGoogleChat', () => {
         it('should send message to Google Chat successfully', async () => {
-            const message = 'Test message';
+            const message = {
+                cardsV2: [
+                    {
+                        cardId: 'test-card',
+                        card: {
+                            header: {
+                                title: 'Test Card'
+                            }
+                        }
+                    }
+                ]
+            };
             global.fetch.mockResolvedValueOnce({
                 ok: true,
                 status: 200,
@@ -45,14 +56,28 @@ describe('Webhook Service', () => {
                 config.google_chat_webhook_url,
                 expect.objectContaining({
                     method: 'POST',
-                    body: JSON.stringify({ text: message })
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(message)
                 })
             );
             expect(console.error).not.toHaveBeenCalled();
         });
 
         it('should handle Google Chat API errors', async () => {
-            const message = 'Test message';
+            const message = {
+                cardsV2: [
+                    {
+                        cardId: 'test-card',
+                        card: {
+                            header: {
+                                title: 'Test Card'
+                            }
+                        }
+                    }
+                ]
+            };
             global.fetch.mockRejectedValueOnce(new Error('API Error'));
 
             const result = await webhookService.sendToGoogleChat(message);
@@ -61,7 +86,10 @@ describe('Webhook Service', () => {
                 config.google_chat_webhook_url,
                 expect.objectContaining({
                     method: 'POST',
-                    body: JSON.stringify({ text: message })
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(message)
                 })
             );
             expect(console.error).toHaveBeenCalledWith(

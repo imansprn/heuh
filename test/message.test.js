@@ -10,21 +10,32 @@ describe('Message Service', () => {
                 level: 'error',
                 url: 'https://sentry.io/test',
                 environment: 'production',
+                event_id: 'abc123',
+                release: 'v1.0.0',
                 user: {
                     username: 'testuser',
                     email: 'test@example.com'
                 }
-            }
+            },
+            project: {
+                name: 'test-project',
+                slug: 'test-project'
+            },
+            url: 'https://sentry.io/test'
         };
 
         it('should format Sentry error message correctly', () => {
             const result = messageService.formatSentryMessage(mockSentryPayload);
-            expect(result).toContain('🚨 *Sentry Error Alert*');
-            expect(result).toContain('*Title:* Test Error');
-            expect(result).toContain('*Level:* error');
-            expect(result).toContain('*Environment:* production');
-            expect(result).toContain('*User:* testuser (test@example.com)');
-            expect(result).toContain('*URL:* https://sentry.io/test');
+            expect(result).toHaveProperty('cardsV2');
+            expect(result.cardsV2[0].card.header.title).toBe('🚨 ERROR - Sentry Notification');
+            expect(result.cardsV2[0].card.header.subtitle).toBe('Environment: production');
+            
+            const widgets = result.cardsV2[0].card.sections[0].widgets;
+            expect(widgets[1].decoratedText.text).toBe('🔧 <b>Project:</b> test-project');
+            expect(widgets[2].decoratedText.text).toBe('🆔 <b>Event ID:</b> abc123');
+            expect(widgets[3].decoratedText.text).toBe('👤 <b>User:</b> testuser');
+            expect(widgets[4].decoratedText.text).toBe('📦 <b>Release:</b> v1.0.0');
+            expect(widgets[5].decoratedText.text).toBe('⚠️ <b>Error:</b> Test Error');
         });
 
         it('should handle Sentry payload with missing optional fields', () => {
@@ -32,17 +43,24 @@ describe('Message Service', () => {
                 event: {
                     title: 'Test Error',
                     level: 'error',
-                    url: 'https://sentry.io/test'
-                }
+                    environment: 'production'
+                },
+                project: {
+                    name: 'test-project'
+                },
+                url: 'https://sentry.io/test'
             };
 
             const result = messageService.formatSentryMessage(minimalPayload);
-            expect(result).toContain('🚨 *Sentry Error Alert*');
-            expect(result).toContain('*Title:* Test Error');
-            expect(result).toContain('*Level:* error');
-            expect(result).toContain('*URL:* https://sentry.io/test');
-            expect(result).not.toContain('*Environment:*');
-            expect(result).not.toContain('*User:*');
+            expect(result).toHaveProperty('cardsV2');
+            expect(result.cardsV2[0].card.header.title).toBe('🚨 ERROR - Sentry Notification');
+            expect(result.cardsV2[0].card.header.subtitle).toBe('Environment: production');
+            
+            const widgets = result.cardsV2[0].card.sections[0].widgets;
+            expect(widgets[1].decoratedText.text).toBe('🔧 <b>Project:</b> test-project');
+            expect(widgets[3].decoratedText.text).toBe('👤 <b>User:</b> NA');
+            expect(widgets[4].decoratedText.text).toBe('📦 <b>Release:</b> NA');
+            expect(widgets[5].decoratedText.text).toBe('⚠️ <b>Error:</b> Test Error');
         });
 
         it('should handle Sentry payload with unknown level', () => {
@@ -50,12 +68,16 @@ describe('Message Service', () => {
                 event: {
                     title: 'Test Error',
                     level: 'unknown',
-                    url: 'https://sentry.io/test'
-                }
+                    environment: 'production'
+                },
+                project: {
+                    name: 'test-project'
+                },
+                url: 'https://sentry.io/test'
             };
 
             const result = messageService.formatSentryMessage(payload);
-            expect(result).toContain('*Level:* unknown');
+            expect(result.cardsV2[0].card.header.title).toBe('🚨 UNKNOWN - Sentry Notification');
         });
     });
 
