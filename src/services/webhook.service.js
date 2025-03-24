@@ -1,6 +1,5 @@
 'use strict';
 
-const axios = require('axios');
 const { config } = require('../config');
 
 const sendToGoogleChat = async (message) => {
@@ -9,15 +8,18 @@ const sendToGoogleChat = async (message) => {
     }
 
     try {
-        await axios.post(
-            config.google_chat_webhook_url,
-            { text: message },
-            {
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
+        const response = await fetch(config.google_chat_webhook_url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ text: message })
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
         return true;
     } catch (error) {
         console.error('Error sending message to Google Chat:', error.message);
