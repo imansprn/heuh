@@ -18,8 +18,16 @@ jest.mock('../src/config', () => ({
 global.fetch = jest.fn();
 
 describe('Webhook Service', () => {
+    let originalConsoleError;
+
     beforeEach(() => {
         jest.clearAllMocks();
+        originalConsoleError = console.error;
+        console.error = jest.fn();
+    });
+
+    afterEach(() => {
+        console.error = originalConsoleError;
     });
 
     describe('sendToGoogleChat', () => {
@@ -40,6 +48,7 @@ describe('Webhook Service', () => {
                     body: JSON.stringify({ text: message })
                 })
             );
+            expect(console.error).not.toHaveBeenCalled();
         });
 
         it('should handle Google Chat API errors', async () => {
@@ -55,6 +64,10 @@ describe('Webhook Service', () => {
                     body: JSON.stringify({ text: message })
                 })
             );
+            expect(console.error).toHaveBeenCalledWith(
+                'Error sending message to Google Chat:',
+                'API Error'
+            );
         });
 
         it('should handle missing webhook URL', async () => {
@@ -64,6 +77,7 @@ describe('Webhook Service', () => {
             const result = await webhookService.sendToGoogleChat('Test message');
             expect(result).toBe(false);
             expect(global.fetch).not.toHaveBeenCalled();
+            expect(console.error).not.toHaveBeenCalled();
 
             config.google_chat_webhook_url = originalUrl;
         });
@@ -72,6 +86,7 @@ describe('Webhook Service', () => {
             const result = await webhookService.sendToGoogleChat('');
             expect(result).toBe(false);
             expect(global.fetch).not.toHaveBeenCalled();
+            expect(console.error).not.toHaveBeenCalled();
         });
     });
 }); 
