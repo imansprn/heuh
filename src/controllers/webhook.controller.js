@@ -1,29 +1,57 @@
 'use strict';
 
-const httpStatus = require('http-status');
-const catchAsync = require('../utils/catchAsync');
-const { webhookService, sentryService} = require('../services');
-const ApiError = require('../utils/ApiError');
+const { messageService, webhookService, validationService, securityService } = require('../services');
+const { config } = require('../config');
 
-const sentryWebhook = catchAsync(async (req, res) => {
-    const { level, title, project, event_id, user, release, web_url, environment } = req.body.data.event;
+const handleSentryWebhook = async (req, res) => {
+    try {
+        // Rate limiting check
+        if (!securityService.rateLimit(req.ip)) {
+            return res.status(429).json({ error: 'Too many requests' });
+        }
 
-    const message = `*${level.toUpperCase()} - ${title}*\n` +
-        `* Project: ${project}\n` +
-        `* Short ID: ${event_id}\n` +
-        `* User: ${user?.username || 'NA'} - ${user?.email || 'NA'}\n` +
-        `* Environment: ${environment || 'NA'}\n` +
-        `* Release: ${release || 'NA'}\n` +
-        `See full details on Sentry: ${web_url}`;
+        // Validate Sentry webhook signature
+        const signature = req.headers['x-sentry-signature'];
+        if (!validationService.validateSentrySignature(req.body, signature)) {
+            return res.status(401).json({ error: 'Invalid signature' });
+        }
 
-    const webhook = await webhookService.googleChat(message);
-    if (!webhook) {
-        throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Something Went Wrong')
+        // Process Sentry webhook
+        const formattedMessage = messageService.formatSentryMessage(req.body);
+        await webhookService.sendToGoogleChat(formattedMessage);
+        
+        res.status(200).json({ message: 'Webhook processed successfully' });
+    } catch (error) {
+        console.error('Error processing Sentry webhook:', error);
+        res.status(500).json({ error: 'Internal server error' });
     }
+};
 
-    res.status(httpStatus.OK).send();
-});
+const handleGitHubWebhook = async (req, res) => {
+    try {
+        // Rate limiting check
+        if (!securityService.rateLimit(req.ip)) {
+            return res.status(429).json({ error: 'Too many requests' });
+        }
+
+        // Verify GitHub webhook signature
+        const signature = req.headers['x-hub-signature-256'];
+        if (!securityService.verifyGitHubWebhook(JSON.stringify(req.body), signature)) {
+            return res.status(401).json({ error: 'Invalid signature' });
+        }
+
+        // Process GitHub webhook
+        const formattedMessage = messageService.formatGitHubMessage(req.body);
+        await webhookService.sendToGoogleChat(formattedMessage);
+        
+        res.status(200).json({ message: 'Webhook processed successfully' });
+    } catch (error) {
+        console.error('Error processing GitHub webhook:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    }
+};
 
 module.exports = {
-    sentryWebhook,
+    handleSentryWebhook,
+    handleGitHubWebhook
 };
