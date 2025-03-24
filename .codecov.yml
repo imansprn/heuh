@@ -1,0 +1,40 @@
+comment: false
+
+coverage:
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 1%
+    patch:
+      default:
+        target: 80%
+        threshold: 1%
+
+ignore:
+  - "test/**"
+  - "**/*.test.js"
+  - "**/*.spec.js"
+  - "**/__tests__/**"
+  - "**/__mocks__/**"
+  - "**/coverage/**"
+  - "**/node_modules/**"
+  - "**/dist/**"
+  - "**/build/**"
+  - "**/.github/**"
+  - "**/.git/**"
+  - "**/.vscode/**"
+  - "**/.idea/**"
+  - "**/.env*"
+  - "**/jest.config.js"
+  - "**/package.json"
+  - "**/package-lock.json"
+  - "**/README.md"
+  - "**/Dockerfile"
+  - "**/.dockerignore"
+  - "**/.eslintrc.js"
+  - "**/.eslintignore"
+  - "**/.prettierrc.json"
+  - "**/.nvmrc"
+  - "**/nodemon.json"
+  - "**/CONTRIBUTING.md" 
