@@ -15,6 +15,7 @@ module.exports = {
             statements: 80
         }
     },
-    testMatch: ['**/test/**/*.test.js'],
-    verbose: true
+    setupFilesAfterEnv: ['<rootDir>/test/setup.js'],
+    silent: true,
+    verbose: false
 }; 

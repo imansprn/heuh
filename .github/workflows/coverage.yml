@@ -32,9 +32,18 @@ jobs:
         LOG_LEVEL: "error"
         REQUEST_TIMEOUT: "1000"
         MAX_PAYLOAD_SIZE: "1024"
-      run: npm run test:coverage
+      run: |
+        npm run test:coverage
+        if [ $? -eq 0 ]; then
+          echo "Tests passed successfully"
+          exit 0
+        else
+          echo "Tests failed"
+          exit 1
+        fi
     
     - name: Upload coverage reports
+      if: success()
       uses: codecov/codecov-action@v3
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
