@@ -47,33 +47,188 @@ const formatSentryMessage = (payload) => {
 };
 
 const formatGitHubMessage = (payload) => {
-    const { action, review, repository, pull_request } = payload;
-    let message = `📝 *GitHub Review Update*\n\n`;
-
-    message += `*Repository:* ${repository.name}\n`;
-    message += `*PR:* #${pull_request.number} - ${pull_request.title}\n`;
-    message += `*Reviewer:* ${review.user.login}\n`;
-
-    // Add state with emoji
-    const stateEmoji = {
-        approved: '✅',
-        changes_requested: '❌',
-        commented: '💬',
-        dismissed: '🚫'
-    };
-    const emoji = stateEmoji[review.state] || '❓';
-    const state = review.state.charAt(0).toUpperCase() + review.state.slice(1);
-    message += `*State:* ${emoji} ${state}\n`;
-
-    // Add comment if present
-    if (review.body) {
-        message += `*Comment:* ${review.body}\n`;
+    const { action, repository, pull_request, review } = payload;
+    
+    // Handle review events
+    if (review) {
+        return {
+            cardsV2: [
+                {
+                    cardId: 'github-review-notification',
+                    card: {
+                        header: {
+                            title: `👀 Review ${action.charAt(0).toUpperCase() + action.slice(1)}`,
+                            subtitle: `${repository.full_name}`,
+                            imageUrl: review.user.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+                            imageType: 'CIRCLE'
+                        },
+                        sections: [
+                            {
+                                header: 'Review Details',
+                                widgets: [
+                                    { decoratedText: { text: `🔢 <b>PR Number:</b> #${pull_request.number}` } },
+                                    { decoratedText: { text: `📌 <b>PR Title:</b> ${pull_request.title}`, wrapText: true } },
+                                    { decoratedText: { text: `👤 <b>Reviewer:</b> ${review.user.login}` } },
+                                    { decoratedText: { text: `📝 <b>State:</b> ${review.state.charAt(0).toUpperCase() + review.state.slice(1)}` } }
+                                ]
+                            },
+                            {
+                                header: 'Review Comment',
+                                widgets: [
+                                    { textParagraph: { text: review.body || 'No comment provided' } }
+                                ]
+                            },
+                            {
+                                header: 'Quick Links',
+                                widgets: [
+                                    {
+                                        buttonList: {
+                                            buttons: [
+                                                {
+                                                    text: '🔗 View Pull Request',
+                                                    onClick: { openLink: { url: pull_request.html_url } },
+                                                },
+                                                {
+                                                    text: '📂 View Repository',
+                                                    onClick: { openLink: { url: repository.html_url } },
+                                                },
+                                            ],
+                                        },
+                                    },
+                                ],
+                            },
+                        ]
+                    }
+                }
+            ]
+        };
+    }
+    
+    // Handle pull request events
+    if (pull_request) {
+        return {
+            cardsV2: [
+                {
+                    cardId: 'github-pr-notification',
+                    card: {
+                        header: {
+                            title: `🔔 Pull Request Notification`,
+                            subtitle: `${action.toUpperCase()} - ${pull_request.user.login}`,
+                            imageUrl: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+                            imageType: 'CIRCLE',
+                        },
+                        sections: [
+                            {
+                                header: 'Details',
+                                widgets: [
+                                    { decoratedText: { text: `📄 <b>PR Title:</b> ${pull_request.title}` } },
+                                    { decoratedText: { text: `👤 <b>Author:</b> ${pull_request.user.login}` } },
+                                    { decoratedText: { text: `✔️ <b>Status:</b> ${pull_request.state}` } },
+                                    { decoratedText: { text: `📂 <b>Repository:</b> ${repository.full_name}` } },
+                                ],
+                            },
+                            pull_request.requested_reviewers
+                                ? {
+                                    header: 'Review Requested',
+                                    widgets: [
+                                        ...(pull_request.requested_reviewers?.length
+                                            ? pull_request.requested_reviewers.map(reviewer => ({
+                                                decoratedText: {
+                                                    text: `${reviewer.login}`,
+                                                    startIcon: {
+                                                        iconUrl: reviewer.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+                                                    },
+                                                },
+                                            }))
+                                            : [
+                                                {
+                                                    decoratedText: {
+                                                        text: 'No individual reviewers requested.',
+                                                    },
+                                                },
+                                            ]),
+                                        ...(pull_request.requested_teams?.length
+                                            ? pull_request.requested_teams.map(team => ({
+                                                decoratedText: {
+                                                    text: `👤 ${team.name}`,
+                                                },
+                                            }))
+                                            : [
+                                                {
+                                                    decoratedText: {
+                                                        text: 'No team reviewers requested.',
+                                                    },
+                                                },
+                                            ]),
+                                    ],
+                                }
+                                : null,
+                            {
+                                header: 'Quick Links',
+                                widgets: [
+                                    {
+                                        buttonList: {
+                                            buttons: [
+                                                {
+                                                    text: '🔗 View Pull Request',
+                                                    onClick: { openLink: { url: pull_request.html_url } },
+                                                },
+                                                {
+                                                    text: '📂 View Repository',
+                                                    onClick: { openLink: { url: repository.html_url } },
+                                                },
+                                            ],
+                                        },
+                                    },
+                                ],
+                            },
+                        ].filter(Boolean), // Remove null sections if no review_requested
+                    },
+                },
+            ],
+        };
     }
 
-    // Add URL
-    message += `*URL:* ${pull_request.html_url}`;
-
-    return message;
+    // Fallback for unknown events
+    return {
+        cardsV2: [
+            {
+                cardId: 'github-notification',
+                card: {
+                    header: {
+                        title: '🔔 GitHub Notification',
+                        subtitle: repository.full_name,
+                        imageUrl: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+                        imageType: 'CIRCLE'
+                    },
+                    sections: [
+                        {
+                            header: 'Event Details',
+                            widgets: [
+                                { decoratedText: { text: `📝 <b>Action:</b> ${action}` } },
+                                { decoratedText: { text: `📂 <b>Repository:</b> ${repository.full_name}` } }
+                            ]
+                        },
+                        {
+                            header: 'Quick Links',
+                            widgets: [
+                                {
+                                    buttonList: {
+                                        buttons: [
+                                            {
+                                                text: '📂 View Repository',
+                                                onClick: { openLink: { url: repository.html_url } },
+                                            },
+                                        ],
+                                    },
+                                },
+                            ],
+                        }
+                    ]
+                }
+            }
+        ]
+    };
 };
 
 module.exports = {

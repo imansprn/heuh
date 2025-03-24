@@ -36,7 +36,8 @@ const handleGitHubWebhook = async (req, res) => {
 
         // Verify GitHub webhook signature
         const signature = req.headers['x-hub-signature-256'];
-        if (!securityService.verifyGitHubWebhook(JSON.stringify(req.body), signature)) {
+        const payload = JSON.stringify(req.body);
+        if (!securityService.verifyGitHubWebhook(payload, signature)) {
             return res.status(401).json({ error: 'Invalid signature' });
         }
 

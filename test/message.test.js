@@ -88,74 +88,102 @@ describe('Message Service', () => {
                 state: 'approved',
                 body: 'LGTM',
                 user: {
-                    login: 'testuser'
+                    login: 'testuser',
+                    avatar_url: 'https://github.com/testuser.png'
                 }
             },
             pull_request: {
                 number: 123,
                 title: 'Test PR',
-                html_url: 'https://github.com/test/repo/pull/123'
+                html_url: 'https://github.com/test/repo/pull/123',
+                user: {
+                    login: 'author',
+                    avatar_url: 'https://github.com/author.png'
+                },
+                state: 'open'
             },
             repository: {
-                name: 'test-repo'
+                name: 'test-repo',
+                full_name: 'test/test-repo',
+                html_url: 'https://github.com/test/test-repo'
             }
         };
 
         it('should format GitHub review message correctly', () => {
             const result = messageService.formatGitHubMessage(mockGitHubPayload);
-            expect(result).toContain('📝 *GitHub Review Update*');
-            expect(result).toContain('*Repository:* test-repo');
-            expect(result).toContain('*PR:* #123 - Test PR');
-            expect(result).toContain('*Reviewer:* testuser');
-            expect(result).toContain('*State:* ✅ Approved');
-            expect(result).toContain('*Comment:* LGTM');
-            expect(result).toContain('*URL:* https://github.com/test/repo/pull/123');
+            expect(result).toHaveProperty('cardsV2');
+            expect(result.cardsV2[0].card.header.title).toBe('👀 Review Submitted');
+            expect(result.cardsV2[0].card.header.subtitle).toBe('test/test-repo');
+            
+            const reviewDetails = result.cardsV2[0].card.sections[0].widgets;
+            expect(reviewDetails[0].decoratedText.text).toBe('🔢 <b>PR Number:</b> #123');
+            expect(reviewDetails[1].decoratedText.text).toBe('📌 <b>PR Title:</b> Test PR');
+            expect(reviewDetails[2].decoratedText.text).toBe('👤 <b>Reviewer:</b> testuser');
+            expect(reviewDetails[3].decoratedText.text).toBe('📝 <b>State:</b> Approved');
+
+            const comment = result.cardsV2[0].card.sections[1].widgets[0].textParagraph.text;
+            expect(comment).toBe('LGTM');
+
+            const buttons = result.cardsV2[0].card.sections[2].widgets[0].buttonList.buttons;
+            expect(buttons[0].text).toBe('🔗 View Pull Request');
+            expect(buttons[1].text).toBe('📂 View Repository');
         });
 
         it('should handle GitHub payload with missing optional fields', () => {
             const minimalPayload = {
-                action: 'submitted',
-                review: {
-                    state: 'approved',
-                    user: {
-                        login: 'testuser'
-                    }
-                },
+                action: 'opened',
                 pull_request: {
                     number: 123,
                     title: 'Test PR',
-                    html_url: 'https://github.com/test/repo/pull/123'
+                    html_url: 'https://github.com/test/repo/pull/123',
+                    user: {
+                        login: 'author',
+                        avatar_url: 'https://github.com/author.png'
+                    },
+                    state: 'open'
                 },
                 repository: {
-                    name: 'test-repo'
+                    name: 'test-repo',
+                    full_name: 'test/test-repo',
+                    html_url: 'https://github.com/test/test-repo'
                 }
             };
 
             const result = messageService.formatGitHubMessage(minimalPayload);
-            expect(result).toContain('📝 *GitHub Review Update*');
-            expect(result).toContain('*Repository:* test-repo');
-            expect(result).toContain('*PR:* #123 - Test PR');
-            expect(result).toContain('*Reviewer:* testuser');
-            expect(result).toContain('*State:* ✅ Approved');
-            expect(result).not.toContain('*Comment:*');
-            expect(result).toContain('*URL:* https://github.com/test/repo/pull/123');
+            expect(result).toHaveProperty('cardsV2');
+            expect(result.cardsV2[0].card.header.title).toBe('🔔 Pull Request Notification');
+            expect(result.cardsV2[0].card.header.subtitle).toBe('OPENED - author');
+            
+            const details = result.cardsV2[0].card.sections[0].widgets;
+            expect(details[0].decoratedText.text).toBe('📄 <b>PR Title:</b> Test PR');
+            expect(details[1].decoratedText.text).toBe('👤 <b>Author:</b> author');
+            expect(details[2].decoratedText.text).toBe('✔️ <b>Status:</b> open');
+            expect(details[3].decoratedText.text).toBe('📂 <b>Repository:</b> test/test-repo');
+
+            const buttons = result.cardsV2[0].card.sections[1].widgets[0].buttonList.buttons;
+            expect(buttons[0].text).toBe('🔗 View Pull Request');
+            expect(buttons[1].text).toBe('📂 View Repository');
         });
 
         it('should handle different review states correctly', () => {
             const states = ['approved', 'changes_requested', 'commented', 'dismissed'];
-            const expectedEmojis = ['✅', '❌', '💬', '🚫'];
 
-            states.forEach((state, index) => {
+            states.forEach((state) => {
                 const payload = {
                     ...mockGitHubPayload,
                     review: {
                         ...mockGitHubPayload.review,
-                        state
+                        state,
+                        user: {
+                            login: 'testuser',
+                            avatar_url: 'https://github.com/testuser.png'
+                        }
                     }
                 };
 
                 const result = messageService.formatGitHubMessage(payload);
-                expect(result).toContain(`*State:* ${expectedEmojis[index]} ${state.charAt(0).toUpperCase() + state.slice(1)}`);
+                expect(result.cardsV2[0].card.sections[0].widgets[3].decoratedText.text)
+                    .toBe(`📝 <b>State:</b> ${state.charAt(0).toUpperCase() + state.slice(1)}`);
             });
         });
     });
