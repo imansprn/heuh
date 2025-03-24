@@ -1,10 +1,9 @@
 # Heuh - Sentry and GitHub Webhook Integration with Google Chat
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code Coverage](https://codecov.io/gh/gobliggg/heuh/branch/main/graph/badge.svg)](https://codecov.io/gh/gobliggg/heuh)
-[![Node.js CI](https://github.com/gobliggg/heuh/actions/workflows/coverage.yml/badge.svg)](https://github.com/gobliggg/heuh/actions/workflows/coverage.yml)
+[![Code Coverage](https://codecov.io/gh/imansprn/heuh/branch/main/graph/badge.svg)](https://codecov.io/gh/imansprn/heuh)
+[![Node.js CI](https://github.com/imansprn/heuh/actions/workflows/coverage.yml/badge.svg)](https://github.com/imansprn/heuh/actions/workflows/coverage.yml)
 [![Code Style](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
-[![Dependencies](https://img.shields.io/david/gobliggg/heuh.svg)](https://david-dm.org/gobliggg/heuh)
 
 Heuh is a Node.js application that integrates Sentry and GitHub webhooks with Google Chat, allowing you to receive notifications about errors and pull request reviews directly in your Google Chat space.
 
