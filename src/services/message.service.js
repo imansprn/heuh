@@ -51,13 +51,20 @@ const formatGitHubMessage = (payload) => {
     
     // Handle review events
     if (review && review.user) {
+        const isApproved = review.state === 'approved';
+        const reviewIcon = '👀';
+        
+        // Get all reviewers and their statuses
+        const allReviewers = pull_request.requested_reviewers || [];
+        const pendingReviewers = allReviewers.map(reviewer => reviewer.login);
+        
         return {
             cardsV2: [
                 {
                     cardId: 'github-review-notification',
                     card: {
                         header: {
-                            title: `👀 Review ${action.charAt(0).toUpperCase() + action.slice(1)}`,
+                            title: `${reviewIcon} Review ${action.charAt(0).toUpperCase() + action.slice(1)}`,
                             subtitle: `${repository.full_name}`,
                             imageUrl: review.user.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
                             imageType: 'CIRCLE'
@@ -68,14 +75,34 @@ const formatGitHubMessage = (payload) => {
                                 widgets: [
                                     { decoratedText: { text: `🔢 <b>PR Number:</b> #${pull_request.number}` } },
                                     { decoratedText: { text: `📌 <b>PR Title:</b> ${pull_request.title}`, wrapText: true } },
-                                    { decoratedText: { text: `👤 <b>Reviewer:</b> ${review.user.login}` } },
+                                    { decoratedText: { text: `👤 <b>Reviewer:</b> ${review.user.login}`, startIcon: { iconUrl: review.user.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png' } } },
                                     { decoratedText: { text: `📝 <b>State:</b> ${review.state.charAt(0).toUpperCase() + review.state.slice(1)}` } }
                                 ]
                             },
                             {
-                                header: 'Review Comment',
+                                header: 'Review Status',
                                 widgets: [
-                                    { textParagraph: { text: review.body || 'No comment provided' } }
+                                    { textParagraph: { text: review.body } },
+                                    ...(pendingReviewers.length > 0 ? [
+                                        { textParagraph: { text: `\n🔍 <b>Review Checklist:</b>` } },
+                                        ...pendingReviewers.map(reviewer => ({
+                                            decoratedText: {
+                                                text: `⏳ @${reviewer}`,
+                                                startIcon: {
+                                                    iconUrl: reviewer.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+                                                },
+                                            },
+                                        })),
+                                        { textParagraph: { text: `\n<b>Waiting for review from:</b>` } },
+                                        ...pendingReviewers.map(reviewer => ({
+                                            decoratedText: {
+                                                text: `@${reviewer}`,
+                                                startIcon: {
+                                                    iconUrl: reviewer.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+                                                },
+                                            },
+                                        })),
+                                    ] : [])
                                 ]
                             },
                             {
@@ -97,7 +124,7 @@ const formatGitHubMessage = (payload) => {
                                     },
                                 ],
                             },
-                        ]
+                        ].filter(Boolean)
                     }
                 }
             ]
@@ -106,6 +133,84 @@ const formatGitHubMessage = (payload) => {
     
     // Handle pull request events
     if (pull_request) {
+        // Special handling for review requests
+        if (action === 'review_requested') {
+            const requestedReviewers = pull_request.requested_reviewers || [];
+            const requestedTeams = pull_request.requested_teams || [];
+            
+            return {
+                cardsV2: [
+                    {
+                        cardId: 'github-review-request',
+                        card: {
+                            header: {
+                                title: '👀 Review Requested',
+                                subtitle: `${repository.full_name}`,
+                                imageUrl: pull_request.user.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+                                imageType: 'CIRCLE'
+                            },
+                            sections: [
+                                {
+                                    header: 'Pull Request Details',
+                                    widgets: [
+                                        { decoratedText: { text: `🔢 <b>PR Number:</b> #${pull_request.number}` } },
+                                        { decoratedText: { text: `📌 <b>PR Title:</b> ${pull_request.title}`, wrapText: true } },
+                                        { decoratedText: { text: `👤 <b>Author:</b> ${pull_request.user.login}` } }
+                                    ]
+                                },
+                                {
+                                    header: 'Review Request',
+                                    widgets: [
+                                        ...(requestedReviewers.length > 0 ? [
+                                            { textParagraph: { text: `🔍 <b>Hey reviewers!</b>` } },
+                                            ...requestedReviewers.map(reviewer => ({
+                                                decoratedText: {
+                                                    text: `@${reviewer.login}`,
+                                                    startIcon: {
+                                                        iconUrl: reviewer.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+                                                    },
+                                                },
+                                            })),
+                                            { textParagraph: { text: `Please review this PR when you have a chance.` } }
+                                        ] : []),
+                                        ...(requestedTeams.length > 0 ? [
+                                            { textParagraph: { text: `👥 <b>Teams requested:</b>\n${requestedTeams.map(team => `• ${team.name}`).join('\n')}` } }
+                                        ] : [])
+                                    ]
+                                },
+                                pull_request.body ? {
+                                    header: 'Description',
+                                    widgets: [
+                                        { textParagraph: { text: pull_request.body } }
+                                    ]
+                                } : null,
+                                {
+                                    header: 'Quick Links',
+                                    widgets: [
+                                        {
+                                            buttonList: {
+                                                buttons: [
+                                                    {
+                                                        text: '🔗 View Pull Request',
+                                                        onClick: { openLink: { url: pull_request.html_url } }
+                                                    },
+                                                    {
+                                                        text: '📂 View Repository',
+                                                        onClick: { openLink: { url: repository.html_url } }
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    ]
+                                }
+                            ].filter(Boolean)
+                        }
+                    }
+                ]
+            };
+        }
+        
+        // Regular pull request notification
         return {
             cardsV2: [
                 {
@@ -141,21 +246,28 @@ const formatGitHubMessage = (payload) => {
                                     header: 'Review Requested',
                                     widgets: [
                                         ...(pull_request.requested_reviewers?.length
-                                            ? pull_request.requested_reviewers.map(reviewer => ({
-                                                decoratedText: {
-                                                    text: `${reviewer.login}`,
-                                                    startIcon: {
-                                                        iconUrl: reviewer.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+                                            ? [
+                                                { textParagraph: { text: `🔍 <b>Hey reviewers!</b>` } },
+                                                ...pull_request.requested_reviewers.map(reviewer => ({
+                                                    decoratedText: {
+                                                        text: `@${reviewer.login}`,
+                                                        startIcon: {
+                                                            iconUrl: reviewer.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+                                                        },
                                                     },
-                                                },
-                                            }))
+                                                })),
+                                                { textParagraph: { text: `Please review this PR when you have a chance.` } }
+                                            ]
                                             : []),
                                         ...(pull_request.requested_teams?.length
-                                            ? pull_request.requested_teams.map(team => ({
-                                                decoratedText: {
-                                                    text: `👥 ${team.name}`,
-                                                },
-                                            }))
+                                            ? [
+                                                { textParagraph: { text: `👥 <b>Teams requested:</b>` } },
+                                                ...pull_request.requested_teams.map(team => ({
+                                                    decoratedText: {
+                                                        text: team.name,
+                                                    },
+                                                })),
+                                            ]
                                             : []),
                                     ],
                                 }

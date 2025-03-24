@@ -186,5 +186,68 @@ describe('Message Service', () => {
                     .toBe(`📝 <b>State:</b> ${state.charAt(0).toUpperCase() + state.slice(1)}`);
             });
         });
+
+        it('should handle review request with teams', () => {
+            const payload = {
+                action: 'review_requested',
+                pull_request: {
+                    number: 123,
+                    title: 'Test PR',
+                    html_url: 'https://github.com/test/repo/pull/123',
+                    user: {
+                        login: 'author',
+                        avatar_url: 'https://github.com/author.png'
+                    },
+                    state: 'open',
+                    requested_reviewers: [
+                        {
+                            login: 'reviewer1',
+                            avatar_url: 'https://github.com/reviewer1.png'
+                        }
+                    ],
+                    requested_teams: [
+                        {
+                            name: 'team1',
+                            slug: 'team1'
+                        }
+                    ]
+                },
+                repository: {
+                    name: 'test-repo',
+                    full_name: 'test/test-repo',
+                    html_url: 'https://github.com/test/test-repo'
+                }
+            };
+
+            const result = messageService.formatGitHubMessage(payload);
+            expect(result).toHaveProperty('cardsV2');
+            expect(result.cardsV2[0].card.header.title).toBe('👀 Review Requested');
+            
+            const reviewRequest = result.cardsV2[0].card.sections[1].widgets;
+            expect(reviewRequest[0].textParagraph.text).toBe('🔍 <b>Hey reviewers!</b>');
+            expect(reviewRequest[1].decoratedText.text).toBe('@reviewer1');
+            expect(reviewRequest[2].textParagraph.text).toBe('Please review this PR when you have a chance.');
+            expect(reviewRequest[3].textParagraph.text).toBe('👥 <b>Teams requested:</b>\n• team1');
+        });
+
+        it('should handle unknown GitHub events', () => {
+            const payload = {
+                action: 'unknown',
+                repository: {
+                    name: 'test-repo',
+                    full_name: 'test/test-repo',
+                    html_url: 'https://github.com/test/test-repo'
+                }
+            };
+
+            const result = messageService.formatGitHubMessage(payload);
+            expect(result).toHaveProperty('cardsV2');
+            expect(result.cardsV2[0].card.header.title).toBe('🔔 GitHub Notification');
+            expect(result.cardsV2[0].card.header.subtitle).toBe('test/test-repo');
+            
+            const details = result.cardsV2[0].card.sections[0].widgets;
+            expect(details[0].decoratedText.text).toBe('📝 <b>Action:</b> unknown');
+            expect(details[1].decoratedText.text).toBe('📂 <b>Repository:</b> test/test-repo');
+        });
     });
 }); 
