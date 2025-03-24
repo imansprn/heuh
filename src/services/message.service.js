@@ -50,7 +50,7 @@ const formatGitHubMessage = (payload) => {
     const { action, repository, pull_request, review } = payload;
     
     // Handle review events
-    if (review) {
+    if (review && review.user) {
         return {
             cardsV2: [
                 {
@@ -114,7 +114,7 @@ const formatGitHubMessage = (payload) => {
                         header: {
                             title: `🔔 Pull Request Notification`,
                             subtitle: `${action.toUpperCase()} - ${pull_request.user.login}`,
-                            imageUrl: 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
+                            imageUrl: pull_request.user.avatar_url || 'https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png',
                             imageType: 'CIRCLE',
                         },
                         sections: [
@@ -125,9 +125,18 @@ const formatGitHubMessage = (payload) => {
                                     { decoratedText: { text: `👤 <b>Author:</b> ${pull_request.user.login}` } },
                                     { decoratedText: { text: `✔️ <b>Status:</b> ${pull_request.state}` } },
                                     { decoratedText: { text: `📂 <b>Repository:</b> ${repository.full_name}` } },
+                                    pull_request.head && pull_request.base ? 
+                                        { decoratedText: { text: `🌿 <b>Branch:</b> ${pull_request.head.ref} → ${pull_request.base.ref}` } } : null,
+                                    { decoratedText: { text: `📊 <b>Changes:</b> +${pull_request.additions || 0} -${pull_request.deletions || 0} (${pull_request.changed_files || 0} files)` } }
                                 ],
                             },
-                            pull_request.requested_reviewers
+                            pull_request.body ? {
+                                header: 'Description',
+                                widgets: [
+                                    { textParagraph: { text: pull_request.body } }
+                                ]
+                            } : null,
+                            pull_request.requested_reviewers?.length || pull_request.requested_teams?.length
                                 ? {
                                     header: 'Review Requested',
                                     widgets: [
@@ -140,26 +149,14 @@ const formatGitHubMessage = (payload) => {
                                                     },
                                                 },
                                             }))
-                                            : [
-                                                {
-                                                    decoratedText: {
-                                                        text: 'No individual reviewers requested.',
-                                                    },
-                                                },
-                                            ]),
+                                            : []),
                                         ...(pull_request.requested_teams?.length
                                             ? pull_request.requested_teams.map(team => ({
                                                 decoratedText: {
-                                                    text: `👤 ${team.name}`,
+                                                    text: `👥 ${team.name}`,
                                                 },
                                             }))
-                                            : [
-                                                {
-                                                    decoratedText: {
-                                                        text: 'No team reviewers requested.',
-                                                    },
-                                                },
-                                            ]),
+                                            : []),
                                     ],
                                 }
                                 : null,
@@ -182,7 +179,7 @@ const formatGitHubMessage = (payload) => {
                                     },
                                 ],
                             },
-                        ].filter(Boolean), // Remove null sections if no review_requested
+                        ].filter(Boolean), // Remove null sections
                     },
                 },
             ],
