@@ -24,6 +24,7 @@ jobs:
     
     - name: Run tests with coverage
       env:
+        NODE_ENV: "test"
         GOOGLE_CHAT_WEBHOOK_URL: "https://chat.googleapis.com/v1/spaces/test/messages"
         GITHUB_WEBHOOK_SECRET: "test-secret"
         RATE_LIMIT_WINDOW_MS: "1000"

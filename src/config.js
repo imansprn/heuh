@@ -19,12 +19,14 @@ const config = {
     max_payload_size: parseInt(process.env.MAX_PAYLOAD_SIZE, 10) || 102400    // Default: 100KB
 };
 
-// Validate required configurations
-const requiredConfigs = ['google_chat_webhook_url'];
-const missingConfigs = requiredConfigs.filter(key => !config[key]);
+// Validate required configurations only in production
+if (process.env.NODE_ENV === 'production') {
+    const requiredConfigs = ['google_chat_webhook_url'];
+    const missingConfigs = requiredConfigs.filter(key => !config[key]);
 
-if (missingConfigs.length > 0) {
-    console.warn(`Warning: Missing required configuration(s): ${missingConfigs.join(', ')}`);
+    if (missingConfigs.length > 0) {
+        console.warn(`Warning: Missing required configuration(s): ${missingConfigs.join(', ')}`);
+    }
 }
 
 module.exports = { config }; 
