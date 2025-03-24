@@ -1,4 +1,4 @@
-name: Code Coverage
+name: Test Coverage
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  coverage:
+  test:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,11 +23,18 @@ jobs:
       run: npm ci
     
     - name: Run tests with coverage
-      run: npm run test:coverage
+      env:
+        GOOGLE_CHAT_WEBHOOK_URL: "https://chat.googleapis.com/v1/spaces/test/messages"
+        GITHUB_WEBHOOK_SECRET: "test-secret"
+        RATE_LIMIT_WINDOW_MS: "1000"
+        RATE_LIMIT_MAX_REQUESTS: "2"
+        LOG_LEVEL: "error"
+        REQUEST_TIMEOUT: "1000"
+        MAX_PAYLOAD_SIZE: "1024"
+      run: npm test -- --coverage
     
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v5
+    - name: Upload coverage reports
+      uses: codecov/codecov-action@v3
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
-        file: ./coverage/coverage-final.json
         fail_ci_if_error: true 
