@@ -3,24 +3,27 @@
 const Joi = require('joi');
 const httpStatus = require('http-status');
 const pick = require('../utils/pick');
-const ApiError = require('../utils/ApiError');
+const { ApiError } = require('../utils/errors');
 
-const validationMiddleware = (schema) => (req, res, next) => {
-    const validSchema = pick(schema, ['params', 'query', 'body', 'headers']);
-    const object = pick(req, Object.keys(validSchema));
-    const { value, error } = Joi.compile(validSchema)
-        .prefs({ errors: { label: 'key' }, abortEarly: false })
-        .validate(object, {
-            allowUnknown: true
-        })
+/**
+ * Create a validation middleware for the given schema
+ * @param {Object} schema - The Joi schema to validate against
+ * @returns {Function} - The validation middleware
+ */
+const validate = (schema) => {
+    return (req, res, next) => {
+        if (!schema) {
+            next(new ApiError(500, 'Invalid schema configuration'));
+            return;
+        }
 
-    if (error) {
-        const errorMessage = error.details.map((details) => details.message).join(', ');
-        return next(new ApiError(httpStatus.BAD_REQUEST, errorMessage));
-    }
-
-    Object.assign(req, value);
-    return next();
+        const { error } = schema.validate(req.body);
+        if (error) {
+            next(new ApiError(400, 'Validation failed'));
+            return;
+        }
+        next();
+    };
 };
 
-module.exports = validationMiddleware;
+module.exports = validate;

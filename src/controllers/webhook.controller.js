@@ -2,18 +2,20 @@
 
 const { messageService, webhookService, validationService, securityService } = require('../services');
 const { config } = require('../config');
+const ApiError = require('../utils/ApiError');
+const httpStatus = require('http-status');
 
-const handleSentryWebhook = async (req, res) => {
+const handleSentryWebhook = async (req, res, next) => {
     try {
         // Rate limiting check
         if (!securityService.rateLimit(req.ip)) {
-            return res.status(429).json({ error: 'Too many requests' });
+            throw new ApiError(httpStatus.TOO_MANY_REQUESTS, 'Too many requests');
         }
 
         // Validate Sentry webhook signature
         const signature = req.headers['x-sentry-signature'];
         if (!validationService.validateSentrySignature(req.body, signature)) {
-            return res.status(401).json({ error: 'Invalid signature' });
+            throw new ApiError(httpStatus.UNAUTHORIZED, 'Invalid signature');
         }
 
         // Process Sentry webhook
@@ -22,23 +24,22 @@ const handleSentryWebhook = async (req, res) => {
         
         res.status(200).json({ message: 'Webhook processed successfully' });
     } catch (error) {
-        console.error('Error processing Sentry webhook:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        next(error);
     }
 };
 
-const handleGitHubWebhook = async (req, res) => {
+const handleGitHubWebhook = async (req, res, next) => {
     try {
         // Rate limiting check
         if (!securityService.rateLimit(req.ip)) {
-            return res.status(429).json({ error: 'Too many requests' });
+            throw new ApiError(httpStatus.TOO_MANY_REQUESTS, 'Too many requests');
         }
 
         // Verify GitHub webhook signature
         const signature = req.headers['x-hub-signature-256'];
         const payload = JSON.stringify(req.body);
         if (!securityService.verifyGitHubWebhook(payload, signature)) {
-            return res.status(401).json({ error: 'Invalid signature' });
+            throw new ApiError(httpStatus.UNAUTHORIZED, 'Invalid signature');
         }
 
         // Process GitHub webhook
@@ -47,8 +48,7 @@ const handleGitHubWebhook = async (req, res) => {
         
         res.status(200).json({ message: 'Webhook processed successfully' });
     } catch (error) {
-        console.error('Error processing GitHub webhook:', error);
-        res.status(500).json({ error: 'Internal server error' });
+        next(error);
     }
 };
 
