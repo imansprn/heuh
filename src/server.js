@@ -94,6 +94,11 @@ class Server {
             })
         );
 
+        // Serve index.html at root
+        this.#app.get('/', (req, res) => {
+            res.sendFile(path.resolve(__dirname, './../public/index.html'));
+        });
+
         // Add routes
         this.#app.use('', routes);
 
