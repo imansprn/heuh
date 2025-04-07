@@ -94,11 +94,6 @@ class Server {
             })
         );
 
-        // Redirect root to docs
-        this.#app.get('/', (req, res) => {
-            res.redirect('/docs');
-        });
-
         // Add routes
         this.#app.use('', routes);
 
