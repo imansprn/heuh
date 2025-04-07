@@ -1,5 +1,4 @@
 const crypto = require('crypto');
-const { config } = require('../config');
 
 /**
  * Verify the signature of a webhook request
@@ -25,5 +24,5 @@ function verifySignature(signature, body, secret) {
 }
 
 module.exports = {
-    verifySignature
-}; 
+    verifySignature,
+};

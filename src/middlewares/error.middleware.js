@@ -1,45 +1,94 @@
-'use strict';
-
 const httpStatus = require('http-status');
-const { config, logger} = require('../config');
 const ApiError = require('../utils/ApiError');
 
 const errorConverter = (err, req, res, next) => {
+    console.log('Error Converter - Starting conversion');
+    console.log('Error Converter - Input Error:', {
+        name: err.name,
+        message: err.message,
+        statusCode: err.statusCode,
+        isOperational: err.isOperational,
+        isJoi: err.error && err.error.isJoi,
+    });
+
     let error = err;
     if (!(error instanceof ApiError)) {
-        const statusCode = error.statusCode || 500;
-        const message = error.message || 'Internal Server Error';
-        error = new ApiError(statusCode, message);
+        // Handle Joi validation errors
+        if (error.error && error.error.isJoi) {
+            console.log('Error Converter - Converting Joi error');
+            error = new ApiError(httpStatus.BAD_REQUEST, error.error.message, true);
+        } else {
+            console.log('Error Converter - Converting generic error');
+            const statusCode = error.statusCode || httpStatus.INTERNAL_SERVER_ERROR;
+            const message = error.message || 'Internal Server Error';
+            error = new ApiError(statusCode, message, false);
+        }
     }
+
+    console.log('Error Converter - Converted Error:', {
+        name: error.name,
+        message: error.message,
+        statusCode: error.statusCode,
+        isOperational: error.isOperational,
+    });
+
     next(error);
 };
 
-// eslint-disable-next-line no-unused-vars
 const errorHandler = (err, req, res, next) => {
-    let { statusCode, message } = err;
+    console.error(err);
 
-    if (!(err instanceof ApiError)) {
-        statusCode = 500;
-        message = 'Internal Server Error';
+    // Default error response
+    let statusCode = 500;
+    let message = 'Internal server error';
+    let error = {};
+
+    // Handle ApiError
+    if (err instanceof ApiError) {
+        statusCode = err.statusCode;
+        message = err.message;
+        error = err.error || {};
+    }
+    // Handle validation errors
+    else if (err.name === 'ValidationError') {
+        statusCode = 400;
+        message = 'Validation error';
+        error = Object.values(err.errors).map(e => e.message);
+    }
+    // Handle other errors
+    else {
+        error = err.message || 'An unexpected error occurred';
     }
 
-    if (config.env === 'production' && !err.isOperational) {
-        statusCode = 500;
-        message = 'Internal Server Error';
+    // Check if the request is for the API or Swagger UI
+    const isApiRequest = req.path && req.path.startsWith('/webhook');
+
+    // Send JSON response for API routes and tests
+    if (isApiRequest || process.env.NODE_ENV === 'test') {
+        res.status(statusCode).json({
+            error: message,
+            ...(Object.keys(error).length > 0 && { details: error }),
+        });
+    } else {
+        // Send HTML response for other routes
+        res.status(statusCode).send(`
+            <!DOCTYPE html>
+            <html>
+                <head>
+                    <title>Error ${statusCode}</title>
+                    <style>
+                        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+                        h1 { color: #333; }
+                        p { color: #666; }
+                    </style>
+                </head>
+                <body>
+                    <h1>Error ${statusCode}</h1>
+                    <p>${message}</p>
+                </body>
+            </html>
+        `);
     }
-
-    res.locals.errorMessage = err.message;
-
-    const response = {
-        error: message,
-        ...(config.env === 'development' && { stack: err.stack })
-    };
-
-    if (config.env === 'development') {
-        logger.error(err);
-    }
-
-    res.status(statusCode || 500).json(response);
 };
 
 module.exports = {

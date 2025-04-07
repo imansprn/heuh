@@ -16,10 +16,13 @@ Heuh is a Node.js application that integrates Sentry and GitHub webhooks with Go
 - Input validation
 - Beautiful Google Chat card messages
 - Comprehensive test coverage
+- Swagger API documentation
+- Docker support
+- Environment-based configuration
 
 ## Prerequisites
 
-- Node.js (v14 or higher)
+- Node.js (v18 or higher)
 - npm or yarn
 - A Google Chat space with a webhook URL
 - Sentry webhook secret (optional)
@@ -45,15 +48,29 @@ cp .env.example .env
 
 4. Update the `.env` file with your configuration:
 ```env
-PORT=3000
-SENTRY_WEBHOOK_SECRET=your_sentry_webhook_secret
-GITHUB_WEBHOOK_SECRET=your_github_webhook_secret
+# Required Configuration
+APP_ENV=development  # Options: development, test, production
+APP_NAME=heuh
 GOOGLE_CHAT_WEBHOOK_URL=your_google_chat_webhook_url
-RATE_LIMIT_WINDOW_MS=900000
-RATE_LIMIT_MAX_REQUESTS=100
-LOG_LEVEL=info
-REQUEST_TIMEOUT=5000
-MAX_PAYLOAD_SIZE=102400
+
+# Optional Configuration - Server
+PORT=3000  # Default: 3000
+HOST=localhost  # Default: localhost
+
+# Optional Configuration - Webhooks
+GITHUB_WEBHOOK_SECRET=your_github_webhook_secret  # Default: none (webhook verification skipped)
+SENTRY_WEBHOOK_SECRET=your_sentry_webhook_secret  # Default: none (webhook verification skipped)
+
+# Optional Configuration - Rate Limiting
+RATE_LIMIT_WINDOW_MS=900000  # Default: 900000 (15 minutes)
+RATE_LIMIT_MAX_REQUESTS=100  # Default: 100
+
+# Optional Configuration - Logging
+LOG_LEVEL=info  # Default: info
+
+# Optional Configuration - Request Handling
+REQUEST_TIMEOUT=5000  # Default: 5000 (5 seconds)
+MAX_PAYLOAD_SIZE=102400  # Default: 102400 (100KB)
 ```
 
 ## Usage
@@ -71,9 +88,25 @@ npm start
 ```
 
 ### Docker
+
+Build the image:
 ```bash
 docker build -t heuh .
-docker run -p 8080:8080 --env-file .env heuh
+```
+
+Run the container:
+```bash
+docker run -p 3000:3000 \
+  -e APP_ENV=production \
+  -e GOOGLE_CHAT_WEBHOOK_URL=your_webhook_url \
+  -e GITHUB_WEBHOOK_SECRET=your_secret \
+  -e SENTRY_WEBHOOK_SECRET=your_secret \
+  heuh
+```
+
+Or use docker-compose:
+```bash
+docker-compose up
 ```
 
 ### Testing
@@ -89,6 +122,16 @@ npm run test:watch
 npm run test:coverage
 ```
 
+## API Documentation
+
+The API documentation is available at `/docs` when the server is running. It provides detailed information about:
+
+- Available endpoints
+- Request/response formats
+- Authentication requirements
+- Rate limiting
+- Error handling
+
 ## Webhook Configuration
 
 ### Sentry Webhook
@@ -99,7 +142,6 @@ npm run test:coverage
 ```
 http://your-domain/webhook/sentry
 ```
-4. Set the webhook secret in your `.env` file
 
 ### GitHub Webhook
 
@@ -109,44 +151,15 @@ http://your-domain/webhook/sentry
 ```
 http://your-domain/webhook/github
 ```
-4. Set the content type to `application/json`
-5. Select the following events:
-   - Pull request reviews
-6. Set the webhook secret in your `.env` file
-
-## Development
-
-### Running Tests
-```bash
-# Run tests once
-npm test
-
-# Run tests in watch mode
-npm run test:watch
-
-# Run tests with coverage
-npm run test:coverage
-```
-
-### Code Quality
-```bash
-# Run linter
-npm run lint
-
-# Fix linting issues
-npm run lint:fix
-
-# Format code
-npm run format
-```
 
 ## Security
 
-- All webhooks are protected by signature verification
+- All webhooks are verified using HMAC signatures
 - Rate limiting is implemented to prevent abuse
-- Security headers are enabled using Helmet
+- Input validation is performed on all requests
+- Security headers are set using Helmet
+- CORS is properly configured
 - XSS protection is enabled
-- CORS is configured for security
 
 ## Contributing
 
@@ -158,7 +171,7 @@ npm run format
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Author
 

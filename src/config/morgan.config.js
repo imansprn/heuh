@@ -1,5 +1,3 @@
-'use strict';
-
 const morganConfig = require('morgan');
 const config = require('./config.config');
 const logger = require('./logger.config');
@@ -12,12 +10,12 @@ const errorResponseFormat = `${getIpFormat()}:method :url :status - :response-ti
 
 const successHandler = morganConfig(successResponseFormat, {
     skip: (req, res) => res.statusCode >= 400,
-    stream: { write: (message) => logger.info(message.trim()) },
+    stream: { write: message => logger.info(message.trim()) },
 });
 
 const errorHandler = morganConfig(errorResponseFormat, {
     skip: (req, res) => res.statusCode < 400,
-    stream: { write: (message) => logger.error(message.trim()) },
+    stream: { write: message => logger.error(message.trim()) },
 });
 
 module.exports = {

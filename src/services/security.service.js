@@ -1,5 +1,3 @@
-'use strict';
-
 const crypto = require('crypto');
 const { config } = require('../config');
 
@@ -15,11 +13,8 @@ const verifyGitHubWebhook = (payload, signature) => {
     try {
         const hmac = crypto.createHmac('sha256', config.github_webhook_secret);
         const calculatedSignature = `sha256=${hmac.update(payload).digest('hex')}`;
-        
-        return crypto.timingSafeEqual(
-            Buffer.from(signature),
-            Buffer.from(calculatedSignature)
-        );
+
+        return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(calculatedSignature));
     } catch (error) {
         return false;
     }
@@ -37,16 +32,16 @@ class RateLimiter {
         const windowStart = now - windowMs;
 
         // Clean up old requests
-        for (const [key, timestamp] of this.requests) {
+        Array.from(this.requests.entries()).forEach(([key, timestamp]) => {
             if (timestamp < windowStart) {
                 this.requests.delete(key);
             }
-        }
+        });
 
         // Get requests for this IP in the current window
-        const ipRequests = Array.from(this.requests.entries())
-            .filter(([key, timestamp]) => key.startsWith(ip) && timestamp > windowStart)
-            .length;
+        const ipRequests = Array.from(this.requests.entries()).filter(
+            ([key, timestamp]) => key.startsWith(ip) && timestamp > windowStart
+        ).length;
 
         if (ipRequests >= maxRequests) {
             return false;
@@ -65,7 +60,7 @@ class RateLimiter {
 
 const rateLimiter = new RateLimiter();
 
-const rateLimit = (ip) => rateLimiter.isAllowed(ip);
+const rateLimit = ip => rateLimiter.isAllowed(ip);
 
 // For testing purposes
 const resetRateLimiter = () => rateLimiter.reset();
@@ -73,5 +68,5 @@ const resetRateLimiter = () => rateLimiter.reset();
 module.exports = {
     verifyGitHubWebhook,
     rateLimit,
-    resetRateLimiter
-}; 
+    resetRateLimiter,
+};

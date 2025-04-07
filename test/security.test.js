@@ -1,5 +1,3 @@
-'use strict';
-
 const { securityService } = require('../src/services');
 
 // Mock config
@@ -8,9 +6,9 @@ jest.mock('../src/config', () => ({
         github_webhook_secret: 'test-github-secret',
         rate_limit: {
             window_ms: 1000, // 1 second for testing
-            max_requests: 2  // 2 requests per window for testing
-        }
-    }
+            max_requests: 2, // 2 requests per window for testing
+        },
+    },
 }));
 
 describe('Security Service', () => {
@@ -57,8 +55,8 @@ describe('Security Service', () => {
 
         it('should allow requests within limit', () => {
             const ip = '127.0.0.1';
-            
-            for (let i = 0; i < 2; i++) {
+
+            for (let i = 0; i < 2; i += 1) {
                 expect(securityService.rateLimit(ip)).toBe(true);
                 jest.advanceTimersByTime(100); // Advance 100ms between requests
             }
@@ -66,20 +64,20 @@ describe('Security Service', () => {
 
         it('should reject requests exceeding limit', () => {
             const ip = '127.0.0.1';
-            
+
             // First two requests should be allowed
             expect(securityService.rateLimit(ip)).toBe(true);
             jest.advanceTimersByTime(100);
             expect(securityService.rateLimit(ip)).toBe(true);
             jest.advanceTimersByTime(100);
-            
+
             // Third request should be rejected
             expect(securityService.rateLimit(ip)).toBe(false);
         });
 
         it('should reset after window period', () => {
             const ip = '127.0.0.1';
-            
+
             // Fill up the rate limit
             expect(securityService.rateLimit(ip)).toBe(true);
             jest.advanceTimersByTime(100);
@@ -94,4 +92,4 @@ describe('Security Service', () => {
             expect(securityService.rateLimit(ip)).toBe(true);
         });
     });
-}); 
+});

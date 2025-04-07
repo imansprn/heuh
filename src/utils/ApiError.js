@@ -1,15 +1,9 @@
-'use strict';
-
 class ApiError extends Error {
-    constructor(statusCode = 500, message = 'Internal Server Error', isOperational = true, stack = '') {
+    constructor(statusCode = 500, message = 'Internal Server Error', isOperational = true) {
         super(message);
         this.statusCode = statusCode;
         this.isOperational = isOperational;
-        if (stack) {
-            this.stack = stack;
-        } else {
-            Error.captureStackTrace(this, this.constructor);
-        }
+        Error.captureStackTrace(this, this.constructor);
     }
 }
 

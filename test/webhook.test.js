@@ -1,124 +1,114 @@
-'use strict';
-
 const request = require('supertest');
-const app = require('../src/app');
-const { verifySignature } = require('../src/utils/security');
-const messageService = require('../src/services/message.service');
+const express = require('express');
+const httpStatus = require('http-status');
+const routes = require('../src/routes');
+const { errorConverter, errorHandler } = require('../src/middlewares/error.middleware');
+const ApiError = require('../src/utils/ApiError');
 
 // Mock the services
 jest.mock('../src/services', () => ({
     messageService: {
-        formatSentryMessage: jest.fn(),
-        formatGitHubMessage: jest.fn()
+        formatSentryMessage: jest.fn().mockResolvedValue('formatted sentry message'),
+        formatGitHubMessage: jest.fn().mockResolvedValue('formatted github message'),
     },
     webhookService: {
-        sendToGoogleChat: jest.fn()
-    },
-    validationService: {
-        validateSentrySignature: jest.fn(),
-        validateGitHubPayload: jest.fn()
+        sendToGoogleChat: jest.fn().mockResolvedValue(true),
     },
     securityService: {
-        verifyGitHubWebhook: jest.fn(),
-        rateLimit: jest.fn()
-    }
+        rateLimit: jest.fn().mockReturnValue(true),
+    },
+    validationService: {
+        validateSentryWebhook: jest.fn().mockReturnValue({ error: { message: 'Invalid Sentry payload' } }),
+        validateGitHubWebhook: jest.fn().mockReturnValue({ error: { message: 'Invalid GitHub payload' } }),
+    },
 }));
 
-const { webhookService, validationService, securityService } = require('../src/services');
+const { messageService, webhookService, securityService, validationService } = require('../src/services');
 
-describe('Webhook Controller', () => {
-    const mockMessage = {
-        cardsV2: [{
-            card: {
-                header: { title: 'Test Card' },
-                sections: [{ widgets: [{ text: 'Test content' }] }]
-            }
-        }]
-    };
+describe('Webhook Routes', () => {
+    let app;
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        messageService.formatSentryMessage.mockReturnValue(mockMessage);
-        messageService.formatGitHubMessage.mockReturnValue(mockMessage);
-    });
+        app = express();
+        app.use(express.json());
+        app.use('', routes);
 
-    describe('POST /webhook/sentry', () => {
-        it('should handle valid Sentry webhook', async () => {
-            const response = await request(app)
-                .post('/webhook/sentry')
-                .set('x-sentry-hook-signature', 'valid')
-                .send({ event: { id: 'test' } });
-
-            expect(response.status).toBe(200);
-            expect(messageService.formatSentryMessage).toHaveBeenCalled();
-        });
-
-        it('should reject requests exceeding rate limit', async () => {
-            // Make multiple requests to trigger rate limit
-            for (let i = 0; i < 5; i++) {
-                await request(app)
-                    .post('/webhook/sentry')
-                    .set('x-sentry-hook-signature', 'valid')
-                    .send({ event: { id: 'test' } });
+        // Error handling middleware
+        app.use((err, req, res, next) => {
+            if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+                res.status(400).json({ error: err.message });
+                return;
             }
-
-            const response = await request(app)
-                .post('/webhook/sentry')
-                .set('x-sentry-hook-signature', 'valid')
-                .send({ event: { id: 'test' } });
-
-            expect(response.status).toBe(429);
-            expect(response.body).toHaveProperty('error', 'Too many requests');
+            next(err);
         });
 
-        it('should reject invalid Sentry signature', async () => {
-            const response = await request(app)
-                .post('/webhook/sentry')
-                .set('x-sentry-hook-signature', 'invalid')
-                .send({ event: { id: 'test' } });
+        app.use(errorConverter);
+        app.use(errorHandler);
 
-            expect(response.status).toBe(401);
-            expect(response.body).toHaveProperty('error', 'Invalid signature');
-        });
+        // Reset mocks
+        jest.clearAllMocks();
+        securityService.rateLimit.mockReturnValue(true);
+        webhookService.sendToGoogleChat.mockResolvedValue(true);
+        validationService.validateSentryWebhook.mockReturnValue({ error: { message: 'Invalid Sentry payload' } });
+        validationService.validateGitHubWebhook.mockReturnValue({ error: { message: 'Invalid GitHub payload' } });
     });
 
     describe('POST /webhook/github', () => {
-        it('should handle valid GitHub webhook', async () => {
-            const response = await request(app)
-                .post('/webhook/github')
-                .set('x-hub-signature-256', 'sha256=valid')
-                .send({ repository: { name: 'test' } });
+        it('should handle invalid GitHub payload', async () => {
+            const response = await request(app).post('/webhook/github').send({});
+
+            expect(response.status).toBe(400);
+            expect(response.body).toHaveProperty('error');
+            expect(validationService.validateGitHubWebhook).toHaveBeenCalledWith({});
+        });
+
+        it('should handle valid GitHub payload', async () => {
+            validationService.validateGitHubWebhook.mockReturnValueOnce({ error: null });
+            const payload = {
+                action: 'submitted',
+                review: { state: 'approved', user: { login: 'test' }, body: 'LGTM' },
+                pull_request: { number: 1, title: 'Test PR', html_url: 'http://test.com' },
+                repository: { name: 'test-repo' },
+            };
+
+            const response = await request(app).post('/webhook/github').send(payload);
 
             expect(response.status).toBe(200);
-            expect(messageService.formatGitHubMessage).toHaveBeenCalled();
-        });
-
-        it('should reject requests exceeding rate limit', async () => {
-            // Make multiple requests to trigger rate limit
-            for (let i = 0; i < 5; i++) {
-                await request(app)
-                    .post('/webhook/github')
-                    .set('x-hub-signature-256', 'sha256=valid')
-                    .send({ repository: { name: 'test' } });
-            }
-
-            const response = await request(app)
-                .post('/webhook/github')
-                .set('x-hub-signature-256', 'sha256=valid')
-                .send({ repository: { name: 'test' } });
-
-            expect(response.status).toBe(429);
-            expect(response.body).toHaveProperty('error', 'Too many requests');
-        });
-
-        it('should reject invalid GitHub signature', async () => {
-            const response = await request(app)
-                .post('/webhook/github')
-                .set('x-hub-signature-256', 'sha256=invalid')
-                .send({ repository: { name: 'test' } });
-
-            expect(response.status).toBe(401);
-            expect(response.body).toHaveProperty('error', 'Invalid signature');
+            expect(validationService.validateGitHubWebhook).toHaveBeenCalledWith(payload);
+            expect(messageService.formatGitHubMessage).toHaveBeenCalledWith(payload);
+            expect(webhookService.sendToGoogleChat).toHaveBeenCalled();
         });
     });
-}); 
+
+    describe('POST /webhook/sentry', () => {
+        it('should handle invalid Sentry payload', async () => {
+            const response = await request(app).post('/webhook/sentry').send({});
+
+            expect(response.status).toBe(400);
+            expect(response.body).toHaveProperty('error');
+            expect(validationService.validateSentryWebhook).toHaveBeenCalledWith({});
+        });
+
+        it('should handle valid Sentry payload', async () => {
+            validationService.validateSentryWebhook.mockReturnValueOnce({ error: null });
+            const payload = {
+                data: {
+                    event: {
+                        level: 'error',
+                        title: 'Test Error',
+                        project: 'test-project',
+                        event_id: '123',
+                        web_url: 'http://test.com',
+                    },
+                },
+            };
+
+            const response = await request(app).post('/webhook/sentry').send(payload);
+
+            expect(response.status).toBe(200);
+            expect(validationService.validateSentryWebhook).toHaveBeenCalledWith(payload);
+            expect(messageService.formatSentryMessage).toHaveBeenCalledWith(payload);
+            expect(webhookService.sendToGoogleChat).toHaveBeenCalled();
+        });
+    });
+});

@@ -1,5 +1,3 @@
-'use strict';
-
 const { webhookService } = require('../src/services');
 const { config } = require('../src/config');
 
@@ -9,9 +7,9 @@ jest.mock('../src/config', () => ({
         google_chat_webhook_url: 'https://chat.googleapis.com/v1/spaces/test/messages',
         rate_limit: {
             window_ms: 1000,
-            max_requests: 2
-        }
-    }
+            max_requests: 2,
+        },
+    },
 }));
 
 // Mock fetch
@@ -38,16 +36,16 @@ describe('Webhook Service', () => {
                         cardId: 'test-card',
                         card: {
                             header: {
-                                title: 'Test Card'
-                            }
-                        }
-                    }
-                ]
+                                title: 'Test Card',
+                            },
+                        },
+                    },
+                ],
             };
             global.fetch.mockResolvedValueOnce({
                 ok: true,
                 status: 200,
-                json: () => Promise.resolve({})
+                json: () => Promise.resolve({}),
             });
 
             const result = await webhookService.sendToGoogleChat(message);
@@ -57,9 +55,9 @@ describe('Webhook Service', () => {
                 expect.objectContaining({
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(message)
+                    body: JSON.stringify(message),
                 })
             );
             expect(console.error).not.toHaveBeenCalled();
@@ -72,11 +70,11 @@ describe('Webhook Service', () => {
                         cardId: 'test-card',
                         card: {
                             header: {
-                                title: 'Test Card'
-                            }
-                        }
-                    }
-                ]
+                                title: 'Test Card',
+                            },
+                        },
+                    },
+                ],
             };
             global.fetch.mockRejectedValueOnce(new Error('API Error'));
 
@@ -87,15 +85,12 @@ describe('Webhook Service', () => {
                 expect.objectContaining({
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json'
+                        'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify(message)
+                    body: JSON.stringify(message),
                 })
             );
-            expect(console.error).toHaveBeenCalledWith(
-                'Error sending message to Google Chat:',
-                'API Error'
-            );
+            expect(console.error).toHaveBeenCalledWith('Error sending message to Google Chat:', 'API Error');
         });
 
         it('should handle missing webhook URL', async () => {
@@ -117,4 +112,4 @@ describe('Webhook Service', () => {
             expect(console.error).not.toHaveBeenCalled();
         });
     });
-}); 
+});

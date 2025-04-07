@@ -13,6 +13,9 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# Copy .env.example to .env for testing
+RUN cp .env.example .env
+
 # Run tests
 RUN npm test
 
@@ -44,4 +47,4 @@ ENV PORT=3000
 EXPOSE 3000
 
 # Start the application
-CMD ["node", "src/app.js"] 
+CMD ["node", "src/index.js"] 

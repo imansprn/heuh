@@ -1,20 +1,19 @@
-'use strict';
-
 const express = require('express');
-const webhookRoutes = require('./webhook.route');
-const ApiError = require('../utils/ApiError');
 
 const router = express.Router();
+const webhookRoutes = require('./webhook.route');
 
+// Health check endpoint
 router.get('/health', (req, res) => {
-    res.json({ status: 'ok' });
+    res.status(200).json({ status: 'ok' });
 });
 
+// Webhook routes
 router.use('/webhook', webhookRoutes);
 
-// Handle 404
-router.use((req, res, next) => {
-    next(new ApiError(404, 'Not found'));
+// 404 handler
+router.use((req, res) => {
+    res.status(404).json({ error: 'Not found' });
 });
 
 module.exports = router;

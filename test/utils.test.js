@@ -1,5 +1,3 @@
-'use strict';
-
 const ApiError = require('../src/utils/ApiError');
 const catchAsync = require('../src/utils/catchAsync');
 const pick = require('../src/utils/pick');
@@ -52,24 +50,24 @@ describe('Utils', () => {
                 name: 'test',
                 age: 25,
                 email: 'test@example.com',
-                password: 'secret'
+                password: 'secret',
             };
             const keys = ['name', 'email'];
             const result = pick(obj, keys);
             expect(result).toEqual({
                 name: 'test',
-                email: 'test@example.com'
+                email: 'test@example.com',
             });
         });
 
         it('should handle missing keys', () => {
             const obj = {
-                name: 'test'
+                name: 'test',
             };
             const keys = ['name', 'age'];
             const result = pick(obj, keys);
             expect(result).toEqual({
-                name: 'test'
+                name: 'test',
             });
         });
 
@@ -82,11 +80,11 @@ describe('Utils', () => {
 
         it('should handle empty keys array', () => {
             const obj = {
-                name: 'test'
+                name: 'test',
             };
             const keys = [];
             const result = pick(obj, keys);
             expect(result).toEqual({});
         });
     });
-}); 
+});

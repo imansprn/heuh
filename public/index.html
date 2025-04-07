@@ -1,74 +1,148 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Heuh</title>
-    <link href="//fonts.googleapis.com/css?family=Roboto:100,300" rel="stylesheet" type="text/css">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Heuh – Webhook to Google Chat</title>
+    <link href="//fonts.googleapis.com/css?family=Inter:300,400,500" rel="stylesheet" type="text/css">
     <link rel="icon" type="image/png" href="/favicon.ico">
     <style>
-        html {
-            height: 100%;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
         body {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            color: #666666;
-            display: table;
-            font-weight: 100;
-            font-family: 'Roboto', Helvetica, sans-serif;
-        }
-
-        a {
-            font-weight: 300;
-            color: #72B963;
+            font-family: 'Inter', sans-serif;
+            background-color: #ffffff;
+            color: #111827;
+            line-height: 1.5;
+            font-weight: 400;
         }
 
         .container {
-            display: table-cell;
-            text-align: center;
-            vertical-align: middle;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 3rem 2rem;
         }
 
-        .content {
-            text-align: center;
+        h1 {
+            font-size: 2rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+        }
+
+        .subtitle {
+            font-size: 1rem;
+            color: #4b5563;
+            margin-bottom: 1.5rem;
+        }
+
+        .section {
+            margin-bottom: 1.5rem;
+        }
+
+        h2 {
+            font-size: 1.125rem;
+            font-weight: 500;
+            margin-bottom: 1rem;
+            color: #111827;
+        }
+
+        .feature-list {
+            list-style: none;
+        }
+
+        .feature {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0;
+        }
+
+        .feature-icon {
+            color: #10b981;
+        }
+
+        .steps {
+            list-style: none;
+        }
+
+        .step {
+            margin-bottom: 0.5rem;
+            padding-left: 1.5rem;
+            position: relative;
+        }
+
+        .step:before {
+            content: "•";
+            position: absolute;
+            left: 0;
+            color: #10b981;
+        }
+
+        .button {
             display: inline-block;
+            background: #111827;
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 0.25rem;
+            text-decoration: none;
+            font-size: 0.875rem;
+            margin-top: 1.5rem;
         }
 
-        .title {
-            font-size: 96px;
-            margin-bottom: 10px;
+        footer {
+            margin-top: 1.5rem;
+            color: #6b7280;
+            font-size: 0.875rem;
         }
 
-        .text {
-            font-size: 24px;
-            margin-bottom: 20px;
-        }
-
-        .small {
-            font-size: 18px;
-        }
-
-        .github-button {
-            padding-top: 10px;
+        @media (max-width: 640px) {
+            .container {
+                padding: 2rem 1rem;
+            }
         }
     </style>
 </head>
 <body>
-<div class="container">
-    <div class="content">
-        <div class="title">
-            Heuh
-        </div>
-        <div class="small">
-            <p>Get notified about Sentry events directly in your Google Chat!</p>
-        </div>
-        <p class="github-button">
-            <iframe src="https://ghbtns.com/github-btn.html?user=gobliggg&repo=heuh&type=star&count=true&size=large"
-                    frameborder="0" scrolling="0" width="160px" height="30px"></iframe>
-        </p>
+    <div class="container">
+        <h1>Heuh</h1>
+        <p class="subtitle">Bridge your tools to Google Chat</p>
+
+        <section class="section">
+            <h2>Features</h2>
+            <ul class="feature-list">
+                <li class="feature">
+                    <span class="feature-icon">✓</span>
+                    Sentry alerts to Chat
+                </li>
+                <li class="feature">
+                    <span class="feature-icon">✓</span>
+                    GitHub PR notifications
+                </li>
+                <li class="feature">
+                    <span class="feature-icon">✓</span>
+                    Clean message formatting
+                </li>
+            </ul>
+        </section>
+
+        <section class="section">
+            <h2>Setup</h2>
+            <ul class="steps">
+                <li class="step">Create Heuh webhook</li>
+                <li class="step">Add Google Chat URL</li>
+                <li class="step">Connect your tools</li>
+                <li class="step">Start receiving messages</li>
+            </ul>
+            <a href="/docs" class="button">View Docs</a>
+        </section>
+
+        <footer>
+            <p>&copy; 2024 Heuh</p>
+        </footer>
     </div>
-</div>
 </body>
 </html>
