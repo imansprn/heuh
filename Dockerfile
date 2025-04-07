@@ -34,6 +34,7 @@ RUN npm ci --only=production
 # Copy built files from builder stage
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/test ./test
+COPY --from=builder /app/public ./public
 
 # Create non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
