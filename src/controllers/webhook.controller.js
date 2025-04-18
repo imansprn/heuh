@@ -46,14 +46,26 @@ const handleSentryWebhook = async (req, res) => {
  */
 const handleGitHubWebhook = async (req, res) => {
     try {
-        // Get raw body from express.raw()
-        const rawBody = req.body.toString('utf8');
+        // Handle both raw and parsed bodies
+        let rawBody;
         let parsedBody;
-        try {
-            parsedBody = JSON.parse(rawBody);
-        } catch (err) {
-            console.error('GitHub Webhook - Invalid JSON:', err);
-            return res.status(400).json({ error: 'Invalid JSON payload' });
+
+        if (Buffer.isBuffer(req.body)) {
+            // Body is raw buffer from express.raw()
+            rawBody = req.body.toString('utf8');
+            try {
+                parsedBody = JSON.parse(rawBody);
+            } catch (err) {
+                console.error('GitHub Webhook - Invalid JSON:', err);
+                return res.status(400).json({ error: 'Invalid JSON payload' });
+            }
+        } else if (typeof req.body === 'object') {
+            // Body is already parsed
+            parsedBody = req.body;
+            rawBody = JSON.stringify(req.body);
+        } else {
+            console.error('GitHub Webhook - Invalid body type:', typeof req.body);
+            return res.status(400).json({ error: 'Invalid request body' });
         }
 
         // Get signature from headers
