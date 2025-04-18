@@ -1,5 +1,7 @@
 const { messageService, webhookService, validationService, securityService } = require('../services');
 const ApiError = require('../utils/ApiError');
+const { validateGitHubWebhook, validateGitHubPayload } = require('../services/validation.service');
+const httpStatus = require('http-status');
 
 const handleSentryWebhook = async (req, res) => {
     try {
@@ -34,47 +36,36 @@ const handleSentryWebhook = async (req, res) => {
     }
 };
 
-const handleGitHubWebhook = async (req, res) => {
+/**
+ * Handle GitHub webhook
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ * @param {Function} next - Express next middleware function
+ */
+const handleGitHubWebhook = async (req, res, next) => {
     try {
-        console.log('GitHub Webhook - Start processing');
-        // Validate payload
-        const { error } = validationService.validateGitHubWebhook(req.body);
-        if (error) {
-            console.log('GitHub Webhook - Invalid payload:', error.message);
-            console.log('GitHub Webhook - Error object:', JSON.stringify(error, null, 2));
-            return res.status(400).json({ error: error.message });
+        // Get raw body for signature validation
+        const rawBody = req.rawBody;
+        const signature = req.headers['x-hub-signature-256'];
+
+        // Validate webhook signature
+        if (!validateGitHubWebhook(rawBody, signature)) {
+            throw new ApiError(httpStatus.UNAUTHORIZED, 'Invalid webhook signature', true);
         }
 
-        // Rate limiting check
-        if (!securityService.rateLimit(req.ip)) {
-            console.log('GitHub Webhook - Rate limit exceeded');
-            return res.status(429).json({ error: 'Too many requests' });
-        }
+        // Validate payload structure
+        const { value: validatedPayload } = validateGitHubPayload(req.body);
+        const { action, pull_request, repository } = validatedPayload;
 
-        // Process GitHub webhook
-        console.log('GitHub Webhook - Formatting message');
-        const formattedMessage = await messageService.formatGitHubMessage(req.body);
-        console.log('GitHub Webhook - Sending to Google Chat');
-        const result = await webhookService.sendToGoogleChat(formattedMessage);
-        if (!result) {
-            return res.status(500).json({ error: 'Failed to send message to Google Chat' });
-        }
+        // Create message based on action
+        const message = await messageService.createGitHubMessage(action, pull_request, repository);
 
-        console.log('GitHub Webhook - Success');
-        return res.status(200).json({ message: 'Webhook processed successfully' });
+        // Send message to Google Chat
+        await webhookService.sendToGoogleChat(message);
+
+        res.status(httpStatus.OK).json({ message: 'Webhook processed successfully' });
     } catch (error) {
-        console.log('GitHub Webhook - Error:', error);
-        console.log('GitHub Webhook - Error details:', {
-            name: error.name,
-            message: error.message,
-            statusCode: error.statusCode,
-            isOperational: error.isOperational,
-            stack: error.stack,
-        });
-        if (error instanceof ApiError) {
-            return res.status(error.statusCode).json({ error: error.message });
-        }
-        return res.status(500).json({ error: error.message || 'Internal Server Error' });
+        next(error);
     }
 };
 

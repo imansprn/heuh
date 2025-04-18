@@ -1,6 +1,8 @@
 const Joi = require('joi');
 const httpStatus = require('http-status');
 const ApiError = require('../utils/ApiError');
+const config = require('../config/index');
+const crypto = require('crypto');
 
 const sentryWebhookSchema = Joi.object({
     data: Joi.object({
@@ -236,7 +238,41 @@ const validateSentryWebhook = payload => {
     return { value: result.value };
 };
 
-const validateGitHubWebhook = payload => {
+/**
+ * Validates GitHub webhook signature
+ * @param {string} payload - Raw request payload
+ * @param {string} signature - X-Hub-Signature-256 header value
+ * @returns {boolean} - True if signature is valid
+ */
+const validateGitHubWebhook = (payload, signature) => {
+    // Temporary hardcoded secret - replace with environment variable later
+    const secret = config.config.github_webhook_secret;
+    if (!signature || !secret) {
+        return false;
+    }
+
+    // Remove 'sha256=' prefix from signature
+    const receivedSignature = signature.replace('sha256=', '');
+    
+    // Calculate expected signature
+    const expectedSignature = crypto
+        .createHmac('sha256', secret)
+        .update(payload)
+        .digest('hex');
+
+    // Compare signatures
+    return crypto.timingSafeEqual(
+        Buffer.from(receivedSignature),
+        Buffer.from(expectedSignature)
+    );
+};
+
+/**
+ * Validates GitHub webhook payload
+ * @param {Object} payload - GitHub webhook payload
+ * @returns {Object} - Validation result
+ */
+const validateGitHubPayload = payload => {
     if (!payload || !payload.action) {
         throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid payload: missing action', true);
     }
@@ -306,32 +342,8 @@ const validateGitHubWebhook = payload => {
     return { value: result.value };
 };
 
-const validateGitHubPayload = payload => {
-    if (!payload) {
-        throw new ApiError(httpStatus.BAD_REQUEST, 'Missing payload', true);
-    }
-
-    // Check required fields
-    if (!payload.action || !payload.review || !payload.repository) {
-        throw new ApiError(httpStatus.BAD_REQUEST, 'Missing required fields', true);
-    }
-
-    // Validate action
-    if (payload.action !== 'submitted') {
-        throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid action', true);
-    }
-
-    // Validate review state
-    const validStates = ['approved', 'changes_requested', 'commented', 'dismissed'];
-    if (!validStates.includes(payload.review.state)) {
-        throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid review state', true);
-    }
-
-    return true;
-};
-
 module.exports = {
-    validateSentryWebhook,
     validateGitHubWebhook,
     validateGitHubPayload,
+    validateSentryWebhook,
 };
