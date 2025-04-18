@@ -111,6 +111,7 @@ const formatGitHubMessage = payload => {
 
     const { action, repository, pull_request, review } = payload;
 
+    // Handle review_requested action
     if (action === 'review_requested') {
         const reviewers = payload.requested_reviewers?.map(r => `@${r.login}`).join('\n') || '';
         const teams = payload.requested_team_reviewers?.map(t => `• ${t.name}`).join('\n') || '';
@@ -133,13 +134,18 @@ const formatGitHubMessage = payload => {
                             text: `👤 <b>Author:</b> ${pull_request.user?.login || 'Unknown'}`,
                         },
                     },
+                    {
+                        decoratedText: {
+                            text: `🌿 <b>Branch:</b> ${pull_request.head.ref} → ${pull_request.base.ref}`,
+                        },
+                    },
                 ],
             },
             {
                 widgets: [
                     {
                         textParagraph: {
-                            text: '🔍 <b>Hey reviewers!</b>',
+                            text: '🔍 <b>Review Requested!</b>',
                         },
                     },
                     {
@@ -164,6 +170,34 @@ const formatGitHubMessage = payload => {
             });
         }
 
+        // Add action buttons
+        sections.push({
+            widgets: [
+                {
+                    buttonList: {
+                        buttons: [
+                            {
+                                text: '🔗 View Pull Request',
+                                onClick: {
+                                    openLink: {
+                                        url: pull_request.html_url,
+                                    },
+                                },
+                            },
+                            {
+                                text: '📂 View Repository',
+                                onClick: {
+                                    openLink: {
+                                        url: repository.html_url,
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+
         return {
             cardsV2: [
                 {
@@ -179,137 +213,333 @@ const formatGitHubMessage = payload => {
         };
     }
 
-    if (action === 'submitted' && review) {
+    // Handle closed action
+    if (action === 'closed') {
+        const sections = [
+            {
+                widgets: [
+                    {
+                        decoratedText: {
+                            text: `🔢 <b>PR Number:</b> #${pull_request.number}`,
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: `📌 <b>PR Title:</b> ${pull_request.title}`,
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: `👤 <b>Author:</b> ${pull_request.user?.login || 'Unknown'}`,
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: `🌿 <b>Branch:</b> ${pull_request.head.ref} → ${pull_request.base.ref}`,
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: `📊 <b>Changes:</b> +${pull_request.additions} -${pull_request.deletions} (${pull_request.changed_files} files)`,
+                        },
+                    },
+                ],
+            },
+        ];
+
+        if (pull_request.merged) {
+            sections[0].widgets.push({
+                decoratedText: {
+                    text: '✅ <b>Status:</b> Merged',
+                },
+            });
+        } else {
+            sections[0].widgets.push({
+                decoratedText: {
+                    text: '❌ <b>Status:</b> Closed without merging',
+                },
+            });
+        }
+
+        // Add action buttons
+        sections.push({
+            widgets: [
+                {
+                    buttonList: {
+                        buttons: [
+                            {
+                                text: '🔗 View Pull Request',
+                                onClick: {
+                                    openLink: {
+                                        url: pull_request.html_url,
+                                    },
+                                },
+                            },
+                            {
+                                text: '📂 View Repository',
+                                onClick: {
+                                    openLink: {
+                                        url: repository.html_url,
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+
         return {
             cardsV2: [
                 {
                     card: {
                         header: {
-                            title: '👀 Review Submitted',
+                            title: '🔒 Pull Request Closed',
                             subtitle: repository.full_name,
                         },
-                        sections: [
-                            {
-                                widgets: [
-                                    {
-                                        decoratedText: {
-                                            text: `🔢 <b>PR Number:</b> #${pull_request.number}`,
-                                        },
-                                    },
-                                    {
-                                        decoratedText: {
-                                            text: `📌 <b>PR Title:</b> ${pull_request.title}`,
-                                        },
-                                    },
-                                    {
-                                        decoratedText: {
-                                            text: `👤 <b>Reviewer:</b> ${review.user?.login || 'Unknown'}`,
-                                        },
-                                    },
-                                    {
-                                        decoratedText: {
-                                            text: `📝 <b>State:</b> ${review.state.charAt(0).toUpperCase() + review.state.slice(1)}`,
-                                        },
-                                    },
-                                ],
-                            },
-                            {
-                                widgets: [
-                                    {
-                                        textParagraph: {
-                                            text: review.body || 'LGTM',
-                                        },
-                                    },
-                                ],
-                            },
-                            {
-                                widgets: [
-                                    {
-                                        buttonList: {
-                                            buttons: [
-                                                {
-                                                    text: '🔗 View Pull Request',
-                                                    onClick: {
-                                                        openLink: {
-                                                            url: pull_request.html_url,
-                                                        },
-                                                    },
-                                                },
-                                                {
-                                                    text: '📂 View Repository',
-                                                    onClick: {
-                                                        openLink: {
-                                                            url: repository.html_url,
-                                                        },
-                                                    },
-                                                },
-                                            ],
-                                        },
-                                    },
-                                ],
-                            },
-                        ],
+                        sections,
                     },
                 },
             ],
         };
     }
 
-    if (!action || !pull_request) {
+    // Handle synchronize action
+    if (action === 'synchronize') {
+        const sections = [
+            {
+                widgets: [
+                    {
+                        decoratedText: {
+                            text: `🔢 <b>PR Number:</b> #${pull_request.number}`,
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: `📌 <b>PR Title:</b> ${pull_request.title}`,
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: `👤 <b>Author:</b> ${pull_request.user?.login || 'Unknown'}`,
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: `🌿 <b>Branch:</b> ${pull_request.head.ref} → ${pull_request.base.ref}`,
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: `📊 <b>Changes:</b> +${pull_request.additions} -${pull_request.deletions} (${pull_request.changed_files} files)`,
+                        },
+                    },
+                ],
+            },
+        ];
+
+        // Add action buttons
+        sections.push({
+            widgets: [
+                {
+                    buttonList: {
+                        buttons: [
+                            {
+                                text: '🔗 View Pull Request',
+                                onClick: {
+                                    openLink: {
+                                        url: pull_request.html_url,
+                                    },
+                                },
+                            },
+                            {
+                                text: '📂 View Repository',
+                                onClick: {
+                                    openLink: {
+                                        url: repository.html_url,
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+
         return {
             cardsV2: [
                 {
                     card: {
                         header: {
-                            title: '🔔 GitHub Notification',
+                            title: '🔄 Pull Request Updated',
                             subtitle: repository.full_name,
                         },
-                        sections: [
-                            {
-                                widgets: [
-                                    {
-                                        decoratedText: {
-                                            text: '📝 <b>Action:</b> unknown',
-                                        },
-                                    },
-                                ],
-                            },
-                        ],
+                        sections,
                     },
                 },
             ],
         };
     }
 
-    const sections = [];
+    // Handle opened action
+    if (action === 'opened') {
+        const sections = [
+            {
+                header: 'Pull Request Details',
+                widgets: [
+                    {
+                        decoratedText: {
+                            text: `🔢 <b>PR Number:</b> #${pull_request.number}`,
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: `📌 <b>PR Title:</b> ${pull_request.title}`,
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: `👤 <b>Author:</b> ${pull_request.user?.login || 'Unknown'}`,
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: `🌿 <b>Branch:</b> ${pull_request.head.ref} → ${pull_request.base.ref}`,
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: `📊 <b>Changes:</b> +${pull_request.additions} -${pull_request.deletions} (${pull_request.changed_files} files)`,
+                        },
+                    },
+                ],
+            },
+        ];
 
-    // Main section with PR details
-    sections.push({
-        widgets: [
-            {
-                decoratedText: {
-                    text: `📄 <b>PR Title:</b> ${pull_request.title || 'Unknown'}`,
-                },
-            },
-            {
-                decoratedText: {
-                    text: `👤 <b>Author:</b> ${pull_request.user?.login || 'Unknown'}`,
-                },
-            },
-            {
-                decoratedText: {
-                    text: `✔️ <b>Status:</b> ${pull_request.state || 'unknown'}`,
-                },
-            },
-            {
-                decoratedText: {
-                    text: `📂 <b>Repository:</b> ${repository.full_name}`,
-                },
-            },
-        ],
-    });
+        // Add reviewers section if there are requested reviewers
+        if (pull_request.requested_reviewers?.length > 0) {
+            const reviewers = pull_request.requested_reviewers.map(r => `@${r.login}`).join('\n');
+            sections.push({
+                header: 'Requested Reviewers',
+                widgets: [
+                    {
+                        textParagraph: {
+                            text: '👥 <b>Reviewers:</b>',
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: reviewers,
+                        },
+                    },
+                ],
+            });
+        }
 
-    // Branch and changes section
+        // Add teams section if there are requested teams
+        if (pull_request.requested_teams?.length > 0) {
+            const teams = pull_request.requested_teams.map(t => `• ${t.name}`).join('\n');
+            sections.push({
+                header: 'Requested Teams',
+                widgets: [
+                    {
+                        textParagraph: {
+                            text: '👥 <b>Teams:</b>',
+                        },
+                    },
+                    {
+                        decoratedText: {
+                            text: teams,
+                        },
+                    },
+                ],
+            });
+        }
+
+        if (pull_request.body) {
+            sections.push({
+                header: 'Description',
+                widgets: [
+                    {
+                        textParagraph: {
+                            text: pull_request.body,
+                        },
+                    },
+                ],
+            });
+        }
+
+        // Add action buttons
+        sections.push({
+            header: 'Quick Actions',
+            widgets: [
+                {
+                    buttonList: {
+                        buttons: [
+                            {
+                                text: '🔗 View Pull Request',
+                                onClick: {
+                                    openLink: {
+                                        url: pull_request.html_url,
+                                    },
+                                },
+                            },
+                            {
+                                text: '📂 View Repository',
+                                onClick: {
+                                    openLink: {
+                                        url: repository.html_url,
+                                    },
+                                },
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+
+        return {
+            cardsV2: [
+                {
+                    card: {
+                        header: {
+                            title: `[GitHub PR ${action.toUpperCase()}] 📝 ${repository.name} #${pull_request.number} by ${pull_request.user.login}`,
+                        },
+                        sections,
+                    },
+                },
+            ],
+        };
+    }
+
+    // Default case for other actions
+    const sections = [
+        {
+            widgets: [
+                {
+                    decoratedText: {
+                        text: `📄 <b>PR Title:</b> ${pull_request.title || 'Unknown'}`,
+                    },
+                },
+                {
+                    decoratedText: {
+                        text: `👤 <b>Author:</b> ${pull_request.user?.login || 'Unknown'}`,
+                    },
+                },
+                {
+                    decoratedText: {
+                        text: `✔️ <b>Status:</b> ${pull_request.state || 'unknown'}`,
+                    },
+                },
+                {
+                    decoratedText: {
+                        text: `📂 <b>Repository:</b> ${repository.full_name}`,
+                    },
+                },
+            ],
+        },
+    ];
+
     if (pull_request.head && pull_request.base) {
         sections[0].widgets.push({
             decoratedText: {
@@ -326,49 +556,7 @@ const formatGitHubMessage = payload => {
         });
     }
 
-    // Description section
-    if (pull_request.body) {
-        sections.push({
-            header: 'Description',
-            widgets: [
-                {
-                    textParagraph: {
-                        text: pull_request.body,
-                    },
-                },
-            ],
-        });
-    }
-
-    // Review section
-    if (payload.requested_reviewers?.length || payload.requested_team_reviewers?.length) {
-        const reviewSection = {
-            header: 'Review Requested',
-            widgets: [],
-        };
-
-        if (payload.requested_reviewers?.length) {
-            reviewSection.widgets.push({
-                decoratedText: {
-                    text: payload.requested_reviewers.map(r => `@${r.login}`).join('\n'),
-                },
-            });
-        }
-
-        if (payload.requested_team_reviewers?.length) {
-            reviewSection.widgets.push({
-                textParagraph: {
-                    text: `👥 <b>Teams requested:</b>\n${payload.requested_team_reviewers
-                        .map(t => `• ${t.name}`)
-                        .join('\n')}`,
-                },
-            });
-        }
-
-        sections.push(reviewSection);
-    }
-
-    // Action buttons
+    // Add action buttons
     sections.push({
         widgets: [
             {
