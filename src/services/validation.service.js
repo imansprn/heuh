@@ -242,13 +242,14 @@ const validateSentryWebhook = payload => {
  * Validates GitHub webhook signature
  * @param {string} payload - Raw request payload
  * @param {string} signature - X-Hub-Signature-256 header value
- * @returns {boolean} - True if signature is valid
+ * @returns {Object} - Validation result with error if invalid
  */
 const validateGitHubWebhook = (payload, signature) => {
-    // Temporary hardcoded secret - replace with environment variable later
+    // Use test secret in test environment
     const secret = config.config.github_webhook_secret;
+    
     if (!signature || !secret) {
-        return false;
+        return { error: { message: 'Invalid webhook signature' } };
     }
 
     // Remove 'sha256=' prefix from signature
@@ -261,10 +262,15 @@ const validateGitHubWebhook = (payload, signature) => {
         .digest('hex');
 
     // Compare signatures
-    return crypto.timingSafeEqual(
-        Buffer.from(receivedSignature),
-        Buffer.from(expectedSignature)
-    );
+    try {
+        const isValid = crypto.timingSafeEqual(
+            Buffer.from(receivedSignature),
+            Buffer.from(expectedSignature)
+        );
+        return isValid ? { error: null } : { error: { message: 'Invalid webhook signature' } };
+    } catch (error) {
+        return { error: { message: 'Invalid webhook signature' } };
+    }
 };
 
 /**
@@ -273,62 +279,38 @@ const validateGitHubWebhook = (payload, signature) => {
  * @returns {Object} - Validation result
  */
 const validateGitHubPayload = payload => {
-    if (!payload || !payload.action) {
-        throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid payload: missing action', true);
+    if (!payload) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'Missing payload', true);
     }
 
-    let schema;
-    switch (payload.action) {
-        case 'opened':
-            schema = openedSchema;
-            break;
-        case 'closed':
-            schema = closedSchema;
-            break;
-        case 'reopened':
-            schema = reopenedSchema;
-            break;
-        case 'review_requested':
-            schema = reviewRequestedSchema;
-            break;
-        case 'review_request_removed':
-            schema = reviewRequestRemovedSchema;
-            break;
-        case 'submitted':
-            schema = submittedSchema;
-            break;
-        case 'edited':
-            schema = editedSchema;
-            break;
-        case 'synchronize':
-            schema = synchronizeSchema;
-            break;
-        case 'assigned':
-            schema = assignedSchema;
-            break;
-        case 'unassigned':
-            schema = unassignedSchema;
-            break;
-        case 'labeled':
-            schema = labeledSchema;
-            break;
-        case 'unlabeled':
-            schema = unlabeledSchema;
-            break;
-        case 'ready_for_review':
-            schema = readyForReviewSchema;
-            break;
-        case 'locked':
-            schema = lockedSchema;
-            break;
-        case 'unlocked':
-            schema = unlockedSchema;
-            break;
-        case 'merged':
-            schema = mergedSchema;
-            break;
-        default:
-            throw new ApiError(httpStatus.BAD_REQUEST, `Invalid action: ${payload.action}`, true);
+    // Check required fields
+    if (!payload.action || !payload.pull_request || !payload.repository) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'Missing required fields', true);
+    }
+
+    // Validate action-specific schema
+    const actionSchemas = {
+        opened: openedSchema,
+        closed: closedSchema,
+        reopened: reopenedSchema,
+        review_requested: reviewRequestedSchema,
+        review_request_removed: reviewRequestRemovedSchema,
+        submitted: submittedSchema,
+        edited: editedSchema,
+        synchronize: synchronizeSchema,
+        assigned: assignedSchema,
+        unassigned: unassignedSchema,
+        labeled: labeledSchema,
+        unlabeled: unlabeledSchema,
+        ready_for_review: readyForReviewSchema,
+        locked: lockedSchema,
+        unlocked: unlockedSchema,
+        merged: mergedSchema,
+    };
+
+    const schema = actionSchemas[payload.action];
+    if (!schema) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid action', true);
     }
 
     const result = schema.validate(payload, { abortEarly: false });
@@ -339,7 +321,8 @@ const validateGitHubPayload = payload => {
             true
         );
     }
-    return { value: result.value };
+
+    return true;
 };
 
 module.exports = {

@@ -7,10 +7,10 @@ const handleSentryWebhook = async (req, res) => {
     try {
         console.log('Sentry Webhook - Start processing');
         // Validate payload
-        const { error } = validationService.validateSentryWebhook(req.body);
-        if (error) {
-            console.log('Sentry Webhook - Invalid payload:', error.message);
-            return res.status(400).json({ error: error.message });
+        const validationResult = validationService.validateSentryWebhook(req.body);
+        if (validationResult.error) {
+            console.log('Sentry Webhook - Invalid payload:', validationResult.error.message);
+            return res.status(400).json({ error: validationResult.error.message });
         }
 
         // Rate limiting check
@@ -22,16 +22,19 @@ const handleSentryWebhook = async (req, res) => {
         // Process Sentry webhook
         console.log('Sentry Webhook - Formatting message');
         const formattedMessage = await messageService.formatSentryMessage(req.body);
+        
         console.log('Sentry Webhook - Sending to Google Chat');
-        const result = await webhookService.sendToGoogleChat(formattedMessage);
-        if (!result) {
+        try {
+            await webhookService.sendToGoogleChat(formattedMessage);
+        } catch (chatError) {
+            console.error('Failed to send message to Google Chat:', chatError);
             return res.status(500).json({ error: 'Failed to send message to Google Chat' });
         }
 
         console.log('Sentry Webhook - Success');
         return res.status(200).json({ message: 'Webhook processed successfully' });
     } catch (error) {
-        console.log('Sentry Webhook - Error:', error);
+        console.error('Sentry Webhook - Error:', error);
         return res.status(500).json({ error: error.message || 'Internal Server Error' });
     }
 };
@@ -40,22 +43,27 @@ const handleSentryWebhook = async (req, res) => {
  * Handle GitHub webhook
  * @param {Object} req - Express request object
  * @param {Object} res - Express response object
- * @param {Function} next - Express next middleware function
  */
-const handleGitHubWebhook = async (req, res, next) => {
+const handleGitHubWebhook = async (req, res) => {
     try {
         // Get raw body for signature validation
         const rawBody = req.rawBody;
         const signature = req.headers['x-hub-signature-256'];
 
         // Validate webhook signature
-        if (!validateGitHubWebhook(rawBody, signature)) {
-            throw new ApiError(httpStatus.UNAUTHORIZED, 'Invalid webhook signature', true);
+        const signatureValidation = validationService.validateGitHubWebhook(rawBody, signature);
+        if (signatureValidation.error) {
+            return res.status(400).json({ error: signatureValidation.error.message });
         }
 
         // Validate payload structure
-        const { value: validatedPayload } = validateGitHubPayload(req.body);
-        const { action, pull_request, repository } = validatedPayload;
+        const payloadValidation = validationService.validateGitHubPayload(req.body);
+        if (!payloadValidation) {
+            return res.status(400).json({ error: 'Invalid GitHub payload structure' });
+        }
+
+        // Process the webhook payload
+        const { action, pull_request, repository } = req.body;
 
         // Create message based on action
         const message = await messageService.createGitHubMessage(action, pull_request, repository);
@@ -63,9 +71,10 @@ const handleGitHubWebhook = async (req, res, next) => {
         // Send message to Google Chat
         await webhookService.sendToGoogleChat(message);
 
-        res.status(httpStatus.OK).json({ message: 'Webhook processed successfully' });
+        return res.status(200).json({ message: 'Webhook processed successfully' });
     } catch (error) {
-        next(error);
+        console.error('Error processing webhook:', error);
+        return res.status(500).json({ error: error.message || 'Internal server error' });
     }
 };
 

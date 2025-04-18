@@ -6,13 +6,26 @@ describe('Validation Service', () => {
     describe('validateGitHubPayload', () => {
         const validGitHubPayload = {
             action: 'submitted',
+            pull_request: {
+                number: 1,
+                title: 'Test PR',
+                html_url: 'http://test.com',
+                state: 'open',
+                user: { login: 'test-user' },
+                head: { ref: 'feature', sha: 'abc123' },
+                base: { ref: 'main', sha: 'def456' }
+            },
             review: {
                 state: 'approved',
                 body: 'LGTM',
+                user: { login: 'reviewer' }
             },
             repository: {
                 name: 'test-repo',
+                full_name: 'test/test-repo',
+                owner: { login: 'test-user' }
             },
+            sender: { login: 'test-user' }
         };
 
         it('should validate correct GitHub payload', () => {
@@ -39,7 +52,7 @@ describe('Validation Service', () => {
                 },
             };
             expect(() => validationService.validateGitHubPayload(invalidPayload)).toThrow(
-                new ApiError(httpStatus.BAD_REQUEST, 'Invalid review state', true)
+                new ApiError(httpStatus.BAD_REQUEST, '"review.state" must be one of [approved, changes_requested, commented]', true)
             );
         });
 

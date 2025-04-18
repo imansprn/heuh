@@ -146,7 +146,7 @@ const formatGitHubMessage = payload => {
                                     },
                                     {
                                         decoratedText: {
-                                            text: `🌿 Branch: ${pull_request.head.ref} → ${pull_request.base.ref}`,
+                                            text: `🌿 <b>Branch:</b> ${pull_request.head?.ref || 'unknown'} → ${pull_request.base?.ref || 'unknown'}`,
                                         },
                                     },
                                     {
@@ -234,7 +234,7 @@ const formatGitHubMessage = payload => {
                                     },
                                     {
                                         decoratedText: {
-                                            text: `🌿 Branch: ${pull_request.head.ref} → ${pull_request.base.ref}`,
+                                            text: `🌿 <b>Branch:</b> ${pull_request.head?.ref || 'unknown'} → ${pull_request.base?.ref || 'unknown'}`,
                                         },
                                     },
                                     {
@@ -317,7 +317,7 @@ const formatGitHubMessage = payload => {
                                     },
                                     {
                                         decoratedText: {
-                                            text: `🌿 Branch: ${pull_request.head.ref} → ${pull_request.base.ref}`,
+                                            text: `🌿 <b>Branch:</b> ${pull_request.head?.ref || 'unknown'} → ${pull_request.base?.ref || 'unknown'}`,
                                         },
                                     },
                                     {
@@ -384,7 +384,7 @@ const formatGitHubMessage = payload => {
                     },
                     {
                         decoratedText: {
-                            text: `🌿 <b>Branch:</b> ${pull_request.head.ref} → ${pull_request.base.ref}`,
+                            text: `🌿 <b>Branch:</b> ${pull_request.head?.ref || 'unknown'} → ${pull_request.base?.ref || 'unknown'}`,
                         },
                     },
                     {
@@ -523,7 +523,7 @@ const formatGitHubMessage = payload => {
     if (pull_request.head && pull_request.base) {
         sections[0].widgets.push({
             decoratedText: {
-                text: `🌿 <b>Branch:</b> ${pull_request.head.ref || 'unknown'} → ${pull_request.base.ref || 'unknown'}`,
+                text: `🌿 <b>Branch:</b> ${pull_request.head?.ref || 'unknown'} → ${pull_request.base?.ref || 'unknown'}`,
             },
         });
     }

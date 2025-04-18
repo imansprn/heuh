@@ -8,8 +8,9 @@ const ApiError = require('../src/utils/ApiError');
 // Mock the services
 jest.mock('../src/services', () => ({
     messageService: {
-        formatSentryMessage: jest.fn().mockResolvedValue('formatted sentry message'),
         formatGitHubMessage: jest.fn().mockResolvedValue('formatted github message'),
+        createGitHubMessage: jest.fn().mockResolvedValue('created github message'),
+        formatSentryMessage: jest.fn().mockResolvedValue('formatted sentry message'),
     },
     webhookService: {
         sendToGoogleChat: jest.fn().mockResolvedValue(true),
@@ -18,8 +19,9 @@ jest.mock('../src/services', () => ({
         rateLimit: jest.fn().mockReturnValue(true),
     },
     validationService: {
-        validateSentryWebhook: jest.fn().mockReturnValue({ error: { message: 'Invalid Sentry payload' } }),
-        validateGitHubWebhook: jest.fn().mockReturnValue({ error: { message: 'Invalid GitHub payload' } }),
+        validateSentryWebhook: jest.fn().mockReturnValue({ error: null }),
+        validateGitHubWebhook: jest.fn().mockReturnValue({ error: null }),
+        validateGitHubPayload: jest.fn().mockReturnValue(true),
     },
 }));
 
@@ -49,21 +51,25 @@ describe('Webhook Routes', () => {
         jest.clearAllMocks();
         securityService.rateLimit.mockReturnValue(true);
         webhookService.sendToGoogleChat.mockResolvedValue(true);
-        validationService.validateSentryWebhook.mockReturnValue({ error: { message: 'Invalid Sentry payload' } });
-        validationService.validateGitHubWebhook.mockReturnValue({ error: { message: 'Invalid GitHub payload' } });
+        validationService.validateSentryWebhook.mockReturnValue({ error: null });
+        validationService.validateGitHubWebhook.mockReturnValue({ error: null });
+        validationService.validateGitHubPayload.mockReturnValue(true);
     });
 
     describe('POST /webhook/github', () => {
         it('should handle invalid GitHub payload', async () => {
-            const response = await request(app).post('/webhook/github').send({});
+            validationService.validateGitHubWebhook.mockReturnValueOnce({ error: { message: 'Invalid signature' } });
+            const response = await request(app)
+                .post('/webhook/github')
+                .send({})
+                .set('x-hub-signature-256', 'invalid');
 
             expect(response.status).toBe(400);
             expect(response.body).toHaveProperty('error');
-            expect(validationService.validateGitHubWebhook).toHaveBeenCalledWith({});
+            expect(validationService.validateGitHubWebhook).toHaveBeenCalled();
         });
 
         it('should handle valid GitHub payload', async () => {
-            validationService.validateGitHubWebhook.mockReturnValueOnce({ error: null });
             const payload = {
                 action: 'submitted',
                 review: { state: 'approved', user: { login: 'test' }, body: 'LGTM' },
@@ -71,17 +77,21 @@ describe('Webhook Routes', () => {
                 repository: { name: 'test-repo' },
             };
 
-            const response = await request(app).post('/webhook/github').send(payload);
+            const response = await request(app)
+                .post('/webhook/github')
+                .send(payload)
+                .set('x-hub-signature-256', 'valid');
 
             expect(response.status).toBe(200);
-            expect(validationService.validateGitHubWebhook).toHaveBeenCalledWith(payload);
-            expect(messageService.formatGitHubMessage).toHaveBeenCalledWith(payload);
+            expect(validationService.validateGitHubWebhook).toHaveBeenCalled();
+            expect(messageService.createGitHubMessage).toHaveBeenCalledWith(payload.action, payload.pull_request, payload.repository);
             expect(webhookService.sendToGoogleChat).toHaveBeenCalled();
         });
     });
 
     describe('POST /webhook/sentry', () => {
         it('should handle invalid Sentry payload', async () => {
+            validationService.validateSentryWebhook.mockReturnValueOnce({ error: { message: 'Invalid payload' } });
             const response = await request(app).post('/webhook/sentry').send({});
 
             expect(response.status).toBe(400);
@@ -90,7 +100,6 @@ describe('Webhook Routes', () => {
         });
 
         it('should handle valid Sentry payload', async () => {
-            validationService.validateSentryWebhook.mockReturnValueOnce({ error: null });
             const payload = {
                 data: {
                     event: {
