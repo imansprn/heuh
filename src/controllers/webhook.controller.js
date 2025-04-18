@@ -1,13 +1,13 @@
-const { messageService, webhookService, validationService, securityService } = require('../services');
+const { messageService, webhookService, securityService } = require('../services');
 const ApiError = require('../utils/ApiError');
-const { validateGitHubWebhook, validateGitHubPayload } = require('../services/validation.service');
+const { validateGitHubWebhook, validateGitHubPayload, validateSentryWebhook } = require('../services/validation.service');
 const httpStatus = require('http-status');
 
 const handleSentryWebhook = async (req, res) => {
     try {
         console.log('Sentry Webhook - Start processing');
         // Validate payload
-        const validationResult = validationService.validateSentryWebhook(req.body);
+        const validationResult = validateSentryWebhook(req.body);
         if (validationResult.error) {
             console.log('Sentry Webhook - Invalid payload:', validationResult.error.message);
             return res.status(400).json({ error: validationResult.error.message });
@@ -46,9 +46,22 @@ const handleSentryWebhook = async (req, res) => {
  */
 const handleGitHubWebhook = async (req, res) => {
     try {
-        // Get raw body for signature validation
-        const rawBody = req.rawBody || JSON.stringify(req.body);
+        // Get raw body from express.raw()
+        const rawBody = req.body.toString('utf8');
+        let parsedBody;
+        try {
+            parsedBody = JSON.parse(rawBody);
+        } catch (err) {
+            console.error('GitHub Webhook - Invalid JSON:', err);
+            return res.status(400).json({ error: 'Invalid JSON payload' });
+        }
+
+        // Get signature from headers
         const signature = req.headers['x-hub-signature-256'];
+        if (!signature) {
+            console.error('GitHub Webhook - Missing signature header');
+            return res.status(401).json({ error: 'Missing signature header' });
+        }
 
         // Validate webhook signature
         const signatureValidation = validateGitHubWebhook(rawBody, signature);
@@ -65,7 +78,7 @@ const handleGitHubWebhook = async (req, res) => {
 
         // Validate payload structure
         try {
-            validateGitHubPayload(req.body);
+            validateGitHubPayload(parsedBody);
         } catch (error) {
             console.log('GitHub Webhook - Invalid payload:', error.message);
             return res.status(400).json({ error: error.message });
@@ -73,7 +86,7 @@ const handleGitHubWebhook = async (req, res) => {
 
         // Process GitHub webhook
         console.log('GitHub Webhook - Formatting message');
-        const formattedMessage = await messageService.formatGitHubMessage(req.body);
+        const formattedMessage = await messageService.formatGitHubMessage(parsedBody);
         
         console.log('GitHub Webhook - Sending to Google Chat');
         try {

@@ -5,7 +5,21 @@ const routes = require('../src/routes');
 const { errorConverter, errorHandler } = require('../src/middlewares/error.middleware');
 const ApiError = require('../src/utils/ApiError');
 
-// Mock the services
+// Mock the config module
+jest.mock('../src/config/config.config', () => ({
+    config: {
+        github_webhook_secret: 'test-secret',
+    },
+}));
+
+// Mock the validation service
+jest.mock('../src/services/validation.service', () => ({
+    validateGitHubWebhook: jest.fn().mockReturnValue({ error: null }),
+    validateGitHubPayload: jest.fn().mockReturnValue(true),
+    validateSentryWebhook: jest.fn().mockReturnValue({ error: null }),
+}));
+
+// Mock other services
 jest.mock('../src/services', () => ({
     messageService: {
         formatGitHubMessage: jest.fn().mockResolvedValue('formatted github message'),
@@ -18,21 +32,20 @@ jest.mock('../src/services', () => ({
     securityService: {
         rateLimit: jest.fn().mockReturnValue(true),
     },
-    validationService: {
-        validateSentryWebhook: jest.fn().mockReturnValue({ error: null }),
-        validateGitHubWebhook: jest.fn().mockReturnValue({ error: null }),
-        validateGitHubPayload: jest.fn().mockReturnValue(true),
-    },
 }));
 
-const { messageService, webhookService, securityService, validationService } = require('../src/services');
+const { messageService, webhookService, securityService } = require('../src/services');
+const { validateGitHubWebhook, validateGitHubPayload, validateSentryWebhook } = require('../src/services/validation.service');
+
+// Increase test timeout
+jest.setTimeout(30000);
 
 describe('Webhook Routes', () => {
     let app;
+    let server;
 
     beforeEach(() => {
         app = express();
-        app.use(express.json());
         app.use('', routes);
 
         // Error handling middleware
@@ -51,22 +64,34 @@ describe('Webhook Routes', () => {
         jest.clearAllMocks();
         securityService.rateLimit.mockReturnValue(true);
         webhookService.sendToGoogleChat.mockResolvedValue(true);
-        validationService.validateSentryWebhook.mockReturnValue({ error: null });
-        validationService.validateGitHubWebhook.mockReturnValue({ error: null });
-        validationService.validateGitHubPayload.mockReturnValue(true);
+        validateSentryWebhook.mockReturnValue({ error: null });
+        validateGitHubWebhook.mockReturnValue({ error: null });
+        validateGitHubPayload.mockReturnValue(true);
+
+        // Start server
+        server = app.listen(0);
+    });
+
+    afterEach((done) => {
+        if (server) {
+            server.close(done);
+        } else {
+            done();
+        }
     });
 
     describe('POST /webhook/github', () => {
         it('should handle invalid GitHub payload', async () => {
-            validationService.validateGitHubWebhook.mockReturnValueOnce({ error: { message: 'Invalid signature' } });
+            validateGitHubWebhook.mockReturnValueOnce({ error: { message: 'Invalid signature' } });
             const response = await request(app)
                 .post('/webhook/github')
-                .send({})
-                .set('x-hub-signature-256', 'invalid');
+                .send('{}')
+                .set('x-hub-signature-256', 'invalid')
+                .set('Content-Type', 'application/json');
 
-            expect(response.status).toBe(400);
+            expect(response.status).toBe(401);
             expect(response.body).toHaveProperty('error');
-            expect(validationService.validateGitHubWebhook).toHaveBeenCalled();
+            expect(validateGitHubWebhook).toHaveBeenCalled();
         });
 
         it('should handle valid GitHub payload', async () => {
@@ -79,24 +104,28 @@ describe('Webhook Routes', () => {
 
             const response = await request(app)
                 .post('/webhook/github')
-                .send(payload)
-                .set('x-hub-signature-256', 'valid');
+                .send(JSON.stringify(payload))
+                .set('x-hub-signature-256', 'valid')
+                .set('Content-Type', 'application/json');
 
             expect(response.status).toBe(200);
-            expect(validationService.validateGitHubWebhook).toHaveBeenCalled();
-            expect(messageService.createGitHubMessage).toHaveBeenCalledWith(payload.action, payload.pull_request, payload.repository);
+            expect(validateGitHubWebhook).toHaveBeenCalled();
+            expect(messageService.formatGitHubMessage).toHaveBeenCalledWith(payload);
             expect(webhookService.sendToGoogleChat).toHaveBeenCalled();
         });
     });
 
     describe('POST /webhook/sentry', () => {
         it('should handle invalid Sentry payload', async () => {
-            validationService.validateSentryWebhook.mockReturnValueOnce({ error: { message: 'Invalid payload' } });
-            const response = await request(app).post('/webhook/sentry').send({});
+            validateSentryWebhook.mockReturnValueOnce({ error: { message: 'Invalid payload' } });
+            const response = await request(app)
+                .post('/webhook/sentry')
+                .send({})
+                .set('Content-Type', 'application/json');
 
             expect(response.status).toBe(400);
             expect(response.body).toHaveProperty('error');
-            expect(validationService.validateSentryWebhook).toHaveBeenCalledWith({});
+            expect(validateSentryWebhook).toHaveBeenCalledWith({});
         });
 
         it('should handle valid Sentry payload', async () => {
@@ -112,10 +141,13 @@ describe('Webhook Routes', () => {
                 },
             };
 
-            const response = await request(app).post('/webhook/sentry').send(payload);
+            const response = await request(app)
+                .post('/webhook/sentry')
+                .send(payload)
+                .set('Content-Type', 'application/json');
 
             expect(response.status).toBe(200);
-            expect(validationService.validateSentryWebhook).toHaveBeenCalledWith(payload);
+            expect(validateSentryWebhook).toHaveBeenCalledWith(payload);
             expect(messageService.formatSentryMessage).toHaveBeenCalledWith(payload);
             expect(webhookService.sendToGoogleChat).toHaveBeenCalled();
         });

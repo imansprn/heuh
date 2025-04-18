@@ -1,11 +1,13 @@
 const express = require('express');
 const { handleSentryWebhook, handleGitHubWebhook } = require('../controllers/webhook.controller');
-const rawBodyMiddleware = require('../middlewares/rawBody.middleware');
 
 const router = express.Router();
 
-// Apply raw body middleware to all webhook routes
-router.use(rawBodyMiddleware);
+// GitHub webhook route with raw body handling
+router.post('/github', express.raw({ type: 'application/json' }), handleGitHubWebhook);
+
+// Sentry webhook route with JSON parsing
+router.post('/sentry', express.json(), handleSentryWebhook);
 
 /**
  * @swagger
@@ -104,7 +106,6 @@ router.use(rawBodyMiddleware);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/github', handleGitHubWebhook);
 
 /**
  * @swagger
@@ -141,6 +142,5 @@ router.post('/github', handleGitHubWebhook);
  *             schema:
  *               $ref: '#/components/schemas/Error'
  */
-router.post('/sentry', handleSentryWebhook);
 
 module.exports = router;
