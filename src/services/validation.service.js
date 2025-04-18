@@ -68,12 +68,14 @@ const pullRequestSchema = Joi.object({
     head: Joi.object({
         ref: Joi.string().required(),
         sha: Joi.string().required(),
+        label: Joi.string().pattern(/^[^:]+:[^:]+$/),
         user: userSchema,
         repo: repositorySchema,
     }),
     base: Joi.object({
         ref: Joi.string().required(),
         sha: Joi.string().required(),
+        label: Joi.string().pattern(/^[^:]+:[^:]+$/),
         user: userSchema,
         repo: repositorySchema,
     }),
