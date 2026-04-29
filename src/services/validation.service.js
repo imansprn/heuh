@@ -42,9 +42,9 @@ const repositorySchema = Joi.object({
     description: Joi.string().allow(null),
     fork: Joi.boolean(),
     url: Joi.string().uri(),
-    created_at: Joi.string(),
-    updated_at: Joi.string(),
-    pushed_at: Joi.string(),
+    created_at: Joi.alternatives().try(Joi.string(), Joi.number()),
+    updated_at: Joi.alternatives().try(Joi.string(), Joi.number()),
+    pushed_at: Joi.alternatives().try(Joi.string(), Joi.number()),
     default_branch: Joi.string(),
 }).unknown(true);
 
@@ -225,6 +225,16 @@ const mergedSchema = Joi.object({
     sender: userSchema.required(),
 }).unknown(true);
 
+const pushSchema = Joi.object({
+    ref: Joi.string().required(),
+    commits: Joi.array().required(),
+    repository: repositorySchema.required(),
+    pusher: Joi.object({
+        name: Joi.string().required(),
+        email: Joi.string().required(),
+    }).required(),
+}).unknown(true);
+
 const validateSentryWebhook = payload => {
     const result = sentryWebhookSchema.validate(payload, { abortEarly: false });
     if (result.error) {
@@ -244,9 +254,9 @@ const validateSentryWebhook = payload => {
  * @param {string} signature - X-Hub-Signature-256 header value
  * @returns {Object} - Validation result with error if invalid
  */
-const validateGitHubWebhook = (payload, signature) => {
-    // Use test secret in test environment
-    const secret = config.config.github_webhook_secret;
+const validateGitHubWebhook = (payload, signature, customSecret) => {
+    // Use custom secret if provided, fallback to config secret
+    const secret = customSecret || config.config.github_webhook_secret;
     
     if (!signature || !secret) {
         return { error: { message: 'Invalid webhook signature' } };
@@ -282,7 +292,19 @@ const validateGitHubPayload = payload => {
     if (!payload) {
         throw new ApiError(httpStatus.BAD_REQUEST, 'Missing payload', true);
     }
+    
+    if (payload.zen) {
+        return true; 
+    }
 
+   if (!payload.action && payload.commits) {
+        const pushResult = pushSchema.validate(payload, { abortEarly: false });
+        if (pushResult.error) {
+            throw new ApiError(httpStatus.BAD_REQUEST, pushResult.error.details.map(d => d.message).join(', '), true);
+        }
+        return true; // Berhenti di sini kalau push valid
+    }
+      
     // Check required fields
     if (!payload.action || !payload.pull_request || !payload.repository) {
         throw new ApiError(httpStatus.BAD_REQUEST, 'Missing required fields', true);
@@ -325,8 +347,11 @@ const validateGitHubPayload = payload => {
     return true;
 };
 
+
 module.exports = {
     validateGitHubWebhook,
     validateGitHubPayload,
     validateSentryWebhook,
 };
+
+

@@ -55,7 +55,9 @@ class Server {
                 reviver: null,
                 strict: true,
                 type: 'application/json',
-                verify: undefined,
+                verify: (req, res, buf) => {
+                    req.rawBody = buf.toString();
+                },
             })
         );
 
