@@ -250,36 +250,41 @@ const validateSentryWebhook = payload => {
 
 /**
  * Validates GitHub webhook signature
- * @param {string} payload - Raw request payload
+ * @param {string|Buffer} payload - Raw request payload
  * @param {string} signature - X-Hub-Signature-256 header value
- * @returns {Object} - Validation result with error if invalid
+ * @param {string} [customSecret] - Optional secret to override config
+ * @returns {Object} - { error: null|Object }
  */
 const validateGitHubWebhook = (payload, signature, customSecret) => {
-    // Use custom secret if provided, fallback to config secret
-    const secret = customSecret || config.config.github_webhook_secret;
+    const secret = customSecret || config.github_webhook_secret;
     
-    if (!signature || !secret) {
-        return { error: { message: 'Invalid webhook signature' } };
+    if (!signature) {
+        return { error: { message: 'Missing signature' } };
     }
 
-    // Remove 'sha256=' prefix from signature
-    const receivedSignature = signature.replace('sha256=', '');
+    if (!secret) {
+        // If no secret, skip validation
+        return { error: null };
+    }
+
+    // Remove 'sha256=' prefix
+    const receivedSignature = signature.startsWith('sha256=') 
+        ? signature.replace('sha256=', '') 
+        : signature;
     
-    // Calculate expected signature
     const expectedSignature = crypto
         .createHmac('sha256', secret)
         .update(payload)
         .digest('hex');
 
-    // Compare signatures
     try {
         const isValid = crypto.timingSafeEqual(
             Buffer.from(receivedSignature),
             Buffer.from(expectedSignature)
         );
-        return isValid ? { error: null } : { error: { message: 'Invalid webhook signature' } };
-    } catch (error) {
-        return { error: { message: 'Invalid webhook signature' } };
+        return isValid ? { error: null } : { error: { message: 'Invalid signature' } };
+    } catch (err) {
+        return { error: { message: 'Invalid signature' } };
     }
 };
 

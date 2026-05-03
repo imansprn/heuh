@@ -1,26 +1,65 @@
 const { WebhookSource, Destination, WebhookMapping } = require('../../models');
+const { encrypt } = require('../Encryption/encryption');
 
-// --- Webhook Sources ---
+// ── Encrypt sensitive fields before storing to DB ─────────────────────────────
+const encryptConfig = (config = {}) => {
+    const result = { ...config };
+    if (result.secret) result.secret = encrypt(result.secret);
+    if (result.githubToken) result.githubToken = encrypt(result.githubToken);
+    return result;
+};
+
+// ── Webhook Sources ───────────────────────────────────────────────────────────
 const getSources = async (req, res) => {
-    const sources = await WebhookSource.findAll({
-        include: [{ model: Destination, as: 'destinations' }]
-    });
-    res.json(sources);
+    try {
+        const sources = await WebhookSource.findAll({
+            include: [{ model: Destination, as: 'destinations' }]
+        });
+        // Return sanitized response — do not expose encrypted config to client
+        const sanitized = sources.map(s => ({
+            id: s.id,
+            name: s.name,
+            type: s.type,
+            enabled: s.enabled,
+            destinations: s.destinations,
+        }));
+        res.json(sanitized);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 };
 
 const createSource = async (req, res) => {
     try {
-        const source = await WebhookSource.create(req.body);
-        res.status(201).json(source);
+        const body = { ...req.body };
+
+        // Encrypt sensitive values before inserting into DB
+        if (body.config) {
+            body.config = encryptConfig(body.config);
+        }
+
+        const source = await WebhookSource.create(body);
+
+        // Return only non-sensitive fields to the client
+        res.status(201).json({
+            id: source.id,
+            name: source.name,
+            type: source.type,
+            enabled: source.enabled,
+        });
     } catch (err) {
         res.status(400).json({ error: err.message });
     }
 };
 
-// --- Destinations ---
+// ── Destinations ──────────────────────────────────────────────────────────────
 const getDestinations = async (req, res) => {
-    const destinations = await Destination.findAll();
-    res.json(destinations);
+    try {
+        const destinations = await Destination.findAll();
+        res.json(destinations);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 };
 
 const createDestination = async (req, res) => {
@@ -32,7 +71,7 @@ const createDestination = async (req, res) => {
     }
 };
 
-// --- Mappings ---
+// ── Mappings ──────────────────────────────────────────────────────────────────
 const createMapping = async (req, res) => {
     try {
         const mapping = await WebhookMapping.create(req.body);
@@ -47,5 +86,5 @@ module.exports = {
     createSource,
     getDestinations,
     createDestination,
-    createMapping
+    createMapping,
 };

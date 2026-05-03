@@ -9,7 +9,8 @@
     "test": "jest",
     "test:coverage": "jest --coverage --coverageReporters=text --coverageReporters=lcov",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "generate-admin-key": "node scripts/generate-admin-key.js"
   },
   "keywords": [
     "sentry",
