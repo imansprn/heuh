@@ -12,21 +12,27 @@ const authAdmin = async (req, res, next) => {
             return res.status(401).json({ error: 'API Key is required in X-Admin-Key header' });
         }
 
-        // 1. Fetch all enabled keys (we have to compare one by one because they are hashed)
-        // Note: For high traffic, we should use a cache or a more optimized approach, 
-        // but for an admin panel, this is perfectly fine and secure.
-        const keys = await AdminKey.findAll({ where: { enabled: true } });
+        // 1. Extract ID and Key 
+        const matchFormat = apiKey.match(/^heuh([a-f0-9\-]+)\.(.+)$/);
 
-        let authenticatedKey = null;
-        for (const keyRecord of keys) {
-            const match = await bcrypt.compare(apiKey, keyRecord.keyHash);
-            if (match) {
-                authenticatedKey = keyRecord;
-                break;
-            }
+        if (!matchFormat) {
+            return res.status(401).json({ error: 'Invalid API Key format (must be heuh [1ID] [2KEY])' });
         }
 
-        if (!authenticatedKey) {
+        const id = matchFormat[1];
+        const plainKey = matchFormat[2];
+
+        // 2. Find by primary key(id)
+        let authenticatedKey = await AdminKey.findByPk(id);
+
+        if (!authenticatedKey || !authenticatedKey.enabled) {
+            return res.status(403).json({ error: 'Invalid or disabled API Key' });
+        }
+
+        // 3. Bcrypt verification
+        const match = await bcrypt.compare(plainKey, authenticatedKey.keyHash);
+
+        if (!match) {
             return res.status(403).json({ error: 'Invalid or disabled API Key' });
         }
 
@@ -35,7 +41,7 @@ const authAdmin = async (req, res, next) => {
 
         // 3. Attach key info to request if needed
         req.admin = authenticatedKey;
-        
+
         next();
     } catch (error) {
         console.error('Auth Middleware Error:', error);

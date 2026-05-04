@@ -7,7 +7,7 @@ const crypto = require('crypto');
         const keyName = process.argv[2] || 'Default Admin Key';
 
         // 1. Generate a random secure key
-        const plainKey = `heuh_${crypto.randomBytes(24).toString('hex')}`;
+        const plainKey = crypto.randomBytes(24).toString('hex');
 
         // 2. Hash the key
         const saltRounds = 10;
@@ -20,12 +20,15 @@ const crypto = require('crypto');
             enabled: true
         });
 
+        // 4. create a new format (heuh_v2_{id}.{plainKey}) 
+        const apiKey = `heuh${newKey.id}.${plainKey}`;
+
         console.log('\n--- Admin API Key Generated ---');
         console.log(`Name: ${keyName}`);
         console.log(`ID:   ${newKey.id}`);
         console.log('-------------------------------');
         console.log(`IMPORTANT: Copy and save this key now. It will NOT be shown again!`);
-        console.log(`\nYour API Key: ${plainKey}\n`);
+        console.log(`\nYour API Key: ${apiKey}\n`);
         console.log('-------------------------------\n');
 
         process.exit(0);
