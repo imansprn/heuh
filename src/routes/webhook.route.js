@@ -3,8 +3,9 @@ const { handleSentryWebhook, handleGitHubWebhook } = require('../controllers/web
 
 const router = express.Router();
 
-// GitHub webhook route with raw body handling
-router.post('/github', express.raw({ type: 'application/json' }), handleGitHubWebhook);
+// GitHub webhook route with dynamic source name
+// router.post('/github/:sourceName', express.raw({ type: 'application/json' }), handleGitHubWebhook);
+router.post('/github/:sourceName', handleGitHubWebhook);
 
 // Sentry webhook route with JSON parsing
 router.post('/sentry', express.json(), handleSentryWebhook);

@@ -1,35 +1,75 @@
+const axios = require('axios');
 const { messageService, webhookService, securityService } = require('../services');
-const ApiError = require('../utils/ApiError');
 const { validateGitHubWebhook, validateGitHubPayload, validateSentryWebhook } = require('../services/validation.service');
-const httpStatus = require('http-status');
+const { decrypt } = require('../Encryption/encryption');
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  GITHUB API HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Fetch diff lines dari GitHub API */
+const fetchDiffLines = async (apiUrl, githubToken) => {
+    try {
+        const { data } = await axios.get(apiUrl, {
+            headers: {
+                Authorization: `token ${githubToken || process.env.GITHUB_TOKEN}`,
+                Accept: 'application/vnd.github.v3.diff',
+            },
+        });
+        return data.split('\n')
+            .filter(l => !['diff --git', 'index', '---', '+++', '@@'].some(p => l.startsWith(p)))
+            .filter(l => l.trim() !== '')
+            .slice(0, 10)
+            .map(l => ({
+                text: l.substring(1).trim(), // hapus prefix +/- dan whitespace
+                type: l.startsWith('+') ? 'addition'
+                    : l.startsWith('-') ? 'deletion'
+                        : 'context',
+            }));
+    } catch (err) {
+        console.error('Diff fetch error:', err.message);
+        return [];
+    }
+};
+
+/** Fetch CI status */
+const fetchCIStatus = async (repoFullName, sha, githubToken) => {
+    try {
+        const { data } = await axios.get(
+            `https://api.github.com/repos/${repoFullName}/commits/${sha}/check-runs`,
+            {
+                headers: {
+                    Authorization: `token ${githubToken || process.env.GITHUB_TOKEN}`,
+                    Accept: 'application/vnd.github.v3+json',
+                },
+            }
+        );
+        const runs = data.check_runs ?? [];
+        if (!runs.length) return { status: 'unknown', label: 'No CI' };
+        const conclusions = runs.map(r => r.conclusion ?? r.status);
+        if (conclusions.every(c => c === 'success')) return { status: 'success', label: 'CI Passing' };
+        if (conclusions.some(c => c === 'failure')) return { status: 'failure', label: 'CI Failed' };
+        if (conclusions.some(c => c === 'in_progress')) return { status: 'pending', label: 'CI Running' };
+        return { status: 'unknown', label: 'CI Unknown' };
+    } catch (err) {
+        console.error('CI fetch error:', err.message);
+        return { status: 'unknown', label: 'No CI' };
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  HANDLERS
+// ─────────────────────────────────────────────────────────────────────────────
 
 const handleSentryWebhook = async (req, res) => {
     try {
-        console.log('Sentry Webhook - Start processing');
-        // Validate payload
+        console.log('Sentry Webhook - Start');
         const validationResult = validateSentryWebhook(req.body);
-        if (validationResult.error) {
-            console.log('Sentry Webhook - Invalid payload:', validationResult.error.message);
-            return res.status(400).json({ error: validationResult.error.message });
-        }
+        if (validationResult.error) return res.status(400).json({ error: validationResult.error.message });
+        if (!securityService.rateLimit(req.ip)) return res.status(429).json({ error: 'Too many requests' });
 
-        // Rate limiting check
-        if (!securityService.rateLimit(req.ip)) {
-            console.log('Sentry Webhook - Rate limit exceeded');
-            return res.status(429).json({ error: 'Too many requests' });
-        }
-
-        // Process Sentry webhook
-        console.log('Sentry Webhook - Formatting message');
-        const formattedMessage = await messageService.formatSentryMessage(req.body);
-        
-        console.log('Sentry Webhook - Sending to Google Chat');
-        try {
-            await webhookService.sendToGoogleChat(formattedMessage);
-        } catch (chatError) {
-            console.error('Failed to send message to Google Chat:', chatError);
-            return res.status(500).json({ error: 'Failed to send message to Google Chat' });
-        }
+        const formattedMessage = messageService.formatGoogleChatMessage(req.body, 'sentry');
+        await webhookService.sendToGoogleChat(formattedMessage);
 
         console.log('Sentry Webhook - Success');
         return res.status(200).json({ message: 'Webhook processed successfully' });
@@ -39,76 +79,111 @@ const handleSentryWebhook = async (req, res) => {
     }
 };
 
-/**
- * Handle GitHub webhook
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- */
 const handleGitHubWebhook = async (req, res) => {
     try {
-        // Handle both raw and parsed bodies
-        let rawBody;
-        let parsedBody;
+        const { sourceName } = req.params;
+        const githubEvent = req.headers['x-github-event'];
 
+        if (githubEvent === 'ping') {
+            console.log('GitHub Webhook - Ping');
+            return res.status(200).json({ message: 'Ping Received' });
+        }
+
+        const isPR = githubEvent === 'pull_request';
+
+        // ── Fetch source + destinations dari DB ───────────────────────────────
+        const { WebhookSource, Destination } = require('../../models');
+        const source = await WebhookSource.findOne({
+            where: { name: sourceName, enabled: true },
+            include: [{
+                model: Destination,
+                as: 'destinations',
+                through: { where: { enabled: true } },
+            }],
+        });
+
+        if (!source) {
+            console.error(`Webhook source not found or inactive: ${sourceName}`);
+            return res.status(404).json({ error: 'Webhook source not found or inactive' });
+        }
+
+        const sourceConfig = source.config || {};
+
+        // Decrypt sensitive values fetched from DB before use
+        const secret = decrypt(sourceConfig.secret);
+        const githubToken = decrypt(sourceConfig.githubToken);
+
+        // ── Parse body ────────────────────────────────────────────────────────
+        let rawBody, parsedBody;
         if (Buffer.isBuffer(req.body)) {
-            // Body is raw buffer from express.raw()
             rawBody = req.body.toString('utf8');
-            try {
-                parsedBody = JSON.parse(rawBody);
-            } catch (err) {
-                console.error('GitHub Webhook - Invalid JSON:', err);
-                return res.status(400).json({ error: 'Invalid JSON payload' });
-            }
+            try { parsedBody = JSON.parse(rawBody); }
+            catch { return res.status(400).json({ error: 'Invalid JSON payload' }); }
         } else if (typeof req.body === 'object') {
-            // Body is already parsed
             parsedBody = req.body;
             rawBody = JSON.stringify(req.body);
         } else {
-            console.error('GitHub Webhook - Invalid body type:', typeof req.body);
             return res.status(400).json({ error: 'Invalid request body' });
         }
 
-        // Get signature from headers
+        // ── Signature validation ──────────────────────────────────────────────
         const signature = req.headers['x-hub-signature-256'];
-        if (!signature) {
-            console.error('GitHub Webhook - Missing signature header');
-            return res.status(401).json({ error: 'Missing signature header' });
+        if (!signature) return res.status(401).json({ error: 'Missing signature header' });
+
+        const sigValidation = validateGitHubWebhook(rawBody, signature, secret);
+        if (sigValidation.error) return res.status(401).json({ error: sigValidation.error.message });
+
+        // ── Rate limit ────────────────────────────────────────────────────────
+        if (!securityService.rateLimit(req.ip)) return res.status(429).json({ error: 'Too many requests' });
+
+        // ── Payload validation ────────────────────────────────────────────────
+        try { validateGitHubPayload(parsedBody); }
+        catch (err) { return res.status(400).json({ error: err.message }); }
+
+        const pr = parsedBody.pull_request;
+        const repo = parsedBody.repository;
+
+        // ── Parallel: fetch CI + diff lines ───────────────────────────────────
+        const apiUrl = isPR
+            ? pr?.url
+            : parsedBody.commits?.length > 0
+                ? `https://api.github.com/repos/${repo.full_name}/commits/${parsedBody.after}`
+                : '';
+
+        const [ci, diffLines] = await Promise.all([
+            isPR && pr ? fetchCIStatus(repo.full_name, pr.head.sha, githubToken)
+                : Promise.resolve({ status: 'unknown', label: 'N/A' }),
+            apiUrl ? fetchDiffLines(apiUrl, githubToken)
+                : Promise.resolve([]),
+        ]);
+
+        // ── Format card ───────────────────────────────────────────────────────
+        let msg = messageService.formatGoogleChatMessage(parsedBody, 'github');
+
+        // ── Inject CI + comment count (PR only) ───────────────────────────────
+        if (isPR && pr) {
+            messageService.injectCIWidget(msg, {
+                ci,
+                commentCount: pr.comments ?? 0,
+            });
         }
 
-        // Validate webhook signature
-        const signatureValidation = validateGitHubWebhook(rawBody, signature);
-        if (signatureValidation.error) {
-            console.log('GitHub Webhook - Invalid signature:', signatureValidation.error.message);
-            return res.status(401).json({ error: signatureValidation.error.message });
+        // ── Inject diff as text ───────────────────
+        if (diffLines.length > 0) {
+            messageService.injectDiffText(msg, diffLines);
         }
 
-        // Rate limiting check
-        if (!securityService.rateLimit(req.ip)) {
-            console.log('GitHub Webhook - Rate limit exceeded');
-            return res.status(429).json({ error: 'Too many requests' });
+        // ── Send to all destinations ────────────────────────────────────────
+        const destinations = source.destinations || [];
+        if (!destinations.length) {
+            console.warn('No active destinations for source:', sourceName);
         }
 
-        // Validate payload structure
-        try {
-            validateGitHubPayload(parsedBody);
-        } catch (error) {
-            console.log('GitHub Webhook - Invalid payload:', error.message);
-            return res.status(400).json({ error: error.message });
-        }
+        await Promise.all(destinations.map(dest =>
+            webhookService.sendHeuhMessage(msg, dest.config?.spaceId, dest.url)
+        ));
 
-        // Process GitHub webhook
-        console.log('GitHub Webhook - Formatting message');
-        const formattedMessage = await messageService.formatGitHubMessage(parsedBody);
-        
-        console.log('GitHub Webhook - Sending to Google Chat');
-        try {
-            await webhookService.sendToGoogleChat(formattedMessage);
-        } catch (chatError) {
-            console.error('Failed to send message to Google Chat:', chatError);
-            return res.status(500).json({ error: 'Failed to send message to Google Chat' });
-        }
-
-        console.log('GitHub Webhook - Success');
+        console.log(`GitHub Webhook - Success (sent to ${destinations.length} destination(s))`);
         return res.status(200).json({ message: 'Webhook processed successfully' });
     } catch (error) {
         console.error('GitHub Webhook - Error:', error);
@@ -116,7 +191,4 @@ const handleGitHubWebhook = async (req, res) => {
     }
 };
 
-module.exports = {
-    handleSentryWebhook,
-    handleGitHubWebhook,
-};
+module.exports = { handleSentryWebhook, handleGitHubWebhook };
