@@ -7,8 +7,8 @@ const router = express.Router();
 // router.post('/GitHub/:sourceName', express.raw({ type: 'application/json' }), handleGitHubWebhook);
 router.post('/github/:sourceName', handleGitHubWebhook);
 
-// Sentry webhook route with JSON parsing
-router.post('/sentry', express.json(), handleSentryWebhook);
+// Sentry webhook route with dynamic source name
+router.post('/sentry/:sourceName', express.json(), handleSentryWebhook);
 
 /**
  * @swagger
@@ -117,11 +117,18 @@ router.post('/sentry', express.json(), handleSentryWebhook);
 
 /**
  * @swagger
- * /webhook/sentry:
+ * /webhook/sentry/{sourceName}:
  *   post:
  *     summary: Handle Sentry webhook events
  *     description: Process Sentry webhook events and send notifications to Google Chat
  *     tags: [Webhooks]
+ *     parameters:
+ *       - in: path
+ *         name: sourceName
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Source name configured in admin mappings
  *     requestBody:
  *       required: true
  *       content:

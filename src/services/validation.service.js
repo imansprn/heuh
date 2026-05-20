@@ -282,6 +282,27 @@ const validateGitHubWebhook = (payload, signature, customSecret) => {
     }
 };
 
+const validateSentryWebhookSignature = (payload, signature, customSecret) => {
+    const secret = customSecret || config.sentry_webhook_secret;
+
+    if (!secret) {
+        return { error: null };
+    }
+
+    if (!signature) {
+        return { error: { message: 'Missing signature' } };
+    }
+
+    const expectedSignature = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+
+    try {
+        const isValid = crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
+        return isValid ? { error: null } : { error: { message: 'Invalid signature' } };
+    } catch (err) {
+        return { error: { message: 'Invalid signature' } };
+    }
+};
+
 /**
  * Validates GitHub webhook payload
  * @param {Object} payload - GitHub webhook payload
@@ -346,4 +367,5 @@ module.exports = {
     validateGitHubWebhook,
     validateGitHubPayload,
     validateSentryWebhook,
+    validateSentryWebhookSignature,
 };

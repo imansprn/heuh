@@ -4,6 +4,7 @@ const {
     validateGitHubWebhook,
     validateGitHubPayload,
     validateSentryWebhook,
+    validateSentryWebhookSignature,
 } = require('../services/validation.service');
 const { decrypt } = require('../encryption/encryption');
 const { WebhookSource, Destination } = require('../../models');
@@ -73,21 +74,97 @@ const fetchCIStatus = async (repoFullName, sha, githubToken) => {
 
 const handleSentryWebhook = async (req, res) => {
     try {
-        logger.info('Sentry webhook received');
-        const validationResult = validateSentryWebhook(req.body);
-        if (validationResult.error) {
-            logger.warn('Sentry webhook validation failed', { error: validationResult.error.message, ip: req.ip });
-            return res.status(400).json({ error: validationResult.error.message });
+        const { sourceName } = req.params;
+
+        const source = await WebhookSource.findOne({
+            where: { name: sourceName, type: 'sentry', enabled: true },
+            include: [
+                {
+                    model: Destination,
+                    as: 'destinations',
+                    through: { where: { enabled: true } },
+                },
+            ],
+        });
+
+        if (!source) {
+            logger.warn('Sentry webhook source not found or inactive', { sourceName });
+            return res.status(404).json({ error: 'Webhook source not found or inactive' });
         }
+
+        let rawBody;
+        let parsedBody;
+        if (Buffer.isBuffer(req.body)) {
+            rawBody = req.body.toString('utf8');
+            try {
+                parsedBody = JSON.parse(rawBody);
+            } catch {
+                logger.warn('Sentry webhook rejected: invalid JSON payload', { sourceName, ip: req.ip });
+                return res.status(400).json({ error: 'Invalid JSON payload' });
+            }
+        } else if (typeof req.body === 'object' && req.body !== null) {
+            parsedBody = req.body;
+            rawBody = JSON.stringify(req.body);
+        } else {
+            logger.warn('Sentry webhook rejected: invalid request body type', {
+                sourceName,
+                ip: req.ip,
+                bodyType: typeof req.body,
+            });
+            return res.status(400).json({ error: 'Invalid request body' });
+        }
+
+        const sourceConfig = source.config || {};
+        const secret = decrypt(sourceConfig.secret);
+        const signature = req.headers['sentry-hook-signature'] || req.headers['x-sentry-signature'];
+        const requiresSignatureValidation = Boolean(secret);
+
+        if (requiresSignatureValidation && !signature) {
+            logger.warn('Sentry webhook rejected: missing signature header', { sourceName, ip: req.ip });
+            return res.status(401).json({ error: 'Missing signature header' });
+        }
+
+        if (requiresSignatureValidation) {
+            const signatureValidation = validateSentryWebhookSignature(rawBody, signature, secret);
+            if (signatureValidation.error) {
+                logger.warn('Sentry webhook signature validation failed', {
+                    sourceName,
+                    ip: req.ip,
+                    error: signatureValidation.error.message,
+                });
+                return res.status(401).json({ error: signatureValidation.error.message });
+            }
+        }
+
         if (!securityService.rateLimit(req.ip)) {
-            logger.warn('Sentry webhook rate limited', { ip: req.ip });
+            logger.warn('Sentry webhook rate limited', { sourceName, ip: req.ip });
             return res.status(429).json({ error: 'Too many requests' });
         }
 
-        const formattedMessage = messageService.formatGoogleChatMessage(req.body, 'sentry');
-        await webhookService.sendToGoogleChat(formattedMessage);
+        const validationResult = validateSentryWebhook(parsedBody);
+        if (validationResult.error) {
+            logger.warn('Sentry webhook validation failed', {
+                sourceName,
+                ip: req.ip,
+                error: validationResult.error.message,
+            });
+            return res.status(400).json({ error: validationResult.error.message });
+        }
 
-        logger.info('Sentry webhook processed successfully');
+        const formattedMessage = messageService.formatGoogleChatMessage(parsedBody, 'sentry');
+        const destinations = source.destinations || [];
+        if (!destinations.length) {
+            logger.warn('No active destinations for Sentry webhook source', { sourceName });
+        }
+
+        await Promise.all(
+            destinations.map(dest => webhookService.sendSantetMessage(formattedMessage, dest.config?.spaceId, dest.url))
+        );
+
+        logger.info('Sentry webhook processed successfully', {
+            sourceName,
+            destinationsCount: destinations.length,
+        });
         return res.status(200).json({ message: 'Webhook processed successfully' });
     } catch (error) {
         logger.error('Sentry webhook processing failed', { error: error.message });

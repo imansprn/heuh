@@ -227,9 +227,9 @@ The API documentation is available at `/docs` when the server is running. It pro
 2. Navigate to Webhooks
 3. Add a new webhook with the following URL:
 ```
-http://your-domain/webhook/sentry
+http://your-domain/webhook/sentry/repo-a
 ```
-*Current implementation does not use `:sourceName` for Sentry route.*
+*`repo-a` must match the source `name` created in Admin API.*
 
 ## Admin API Usage
 
