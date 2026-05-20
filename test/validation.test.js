@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const httpStatus = require('http-status');
 const { validationService } = require('../src/services');
 const ApiError = require('../src/utils/ApiError');
@@ -68,6 +69,29 @@ describe('Validation Service', () => {
             expect(() => validationService.validateGitHubPayload(invalidPayload)).toThrow(
                 new ApiError(httpStatus.BAD_REQUEST, 'Missing required fields', true)
             );
+        });
+
+        describe('validateSentryWebhookSignature', () => {
+            const payload = JSON.stringify({ data: { event: { title: 'boom' } } });
+            const secret = 'sentry-secret';
+            const buildSignature = body => crypto.createHmac('sha256', secret).update(body).digest('hex');
+
+            it('should return success for valid signature', () => {
+                const signature = buildSignature(payload);
+                const result = validationService.validateSentryWebhookSignature(payload, signature, secret);
+                expect(result).toEqual({ error: null });
+            });
+
+            it('should return error for invalid signature', () => {
+                const result = validationService.validateSentryWebhookSignature(payload, 'invalid', secret);
+                expect(result.error).toBeDefined();
+                expect(result.error.message).toBe('Invalid signature');
+            });
+
+            it('should skip verification when secret is missing', () => {
+                const result = validationService.validateSentryWebhookSignature(payload, undefined, undefined);
+                expect(result).toEqual({ error: null });
+            });
         });
     });
 });
