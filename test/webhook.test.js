@@ -22,19 +22,22 @@ jest.mock('../src/services/validation.service', () => ({
 // Mock other services
 jest.mock('../src/services', () => ({
     messageService: {
-        formatGitHubMessage: jest.fn().mockResolvedValue('formatted github message'),
-        createGitHubMessage: jest.fn().mockResolvedValue('created github message'),
-        formatSentryMessage: jest.fn().mockResolvedValue('formatted sentry message'),
+        formatGoogleChatMessage: jest.fn().mockReturnValue('formatted message'),
     },
     webhookService: {
-        sendToGoogleChat: jest.fn().mockResolvedValue(true),
+        sendSantetMessage: jest.fn().mockResolvedValue(true),
     },
     securityService: {
         rateLimit: jest.fn().mockReturnValue(true),
     },
 }));
+jest.mock('../models', () => ({
+    WebhookSource: { findOne: jest.fn() },
+    Destination: {},
+}));
 
 const { messageService, webhookService, securityService } = require('../src/services');
+const { WebhookSource } = require('../models');
 const {
     validateGitHubWebhook,
     validateGitHubPayload,
@@ -50,6 +53,7 @@ describe('Webhook Routes', () => {
 
     beforeEach(() => {
         app = express();
+        app.use(express.json());
         app.use('', routes);
 
         // Error handling middleware
@@ -67,10 +71,15 @@ describe('Webhook Routes', () => {
         // Reset mocks
         jest.clearAllMocks();
         securityService.rateLimit.mockReturnValue(true);
-        webhookService.sendToGoogleChat.mockResolvedValue(true);
+        webhookService.sendSantetMessage.mockResolvedValue(true);
+        messageService.formatGoogleChatMessage.mockReturnValue('formatted message');
         validateSentryWebhook.mockReturnValue({ error: null });
         validateGitHubWebhook.mockReturnValue({ error: null });
         validateGitHubPayload.mockReturnValue(true);
+        WebhookSource.findOne.mockResolvedValue({
+            config: {},
+            destinations: [{ config: { spaceId: 'space-1' }, url: 'https://chat.google.com/test' }],
+        });
 
         // Start server
         server = app.listen(0);
@@ -84,18 +93,19 @@ describe('Webhook Routes', () => {
         }
     });
 
-    describe('POST /webhook/github', () => {
+    describe('POST /webhook/github/:sourceName', () => {
         it('should handle invalid GitHub payload', async () => {
-            validateGitHubWebhook.mockReturnValueOnce({ error: { message: 'Invalid signature' } });
+            validateGitHubPayload.mockImplementationOnce(() => {
+                throw new Error('Invalid payload');
+            });
             const response = await request(app)
-                .post('/webhook/github')
-                .send('{}')
-                .set('x-hub-signature-256', 'invalid')
+                .post('/webhook/github/repo-a')
+                .send({ action: 'opened' })
                 .set('Content-Type', 'application/json');
 
-            expect(response.status).toBe(401);
+            expect(response.status).toBe(400);
             expect(response.body).toHaveProperty('error');
-            expect(validateGitHubWebhook).toHaveBeenCalled();
+            expect(validateGitHubPayload).toHaveBeenCalled();
         });
 
         it('should handle valid GitHub payload', async () => {
@@ -107,23 +117,22 @@ describe('Webhook Routes', () => {
             };
 
             const response = await request(app)
-                .post('/webhook/github')
+                .post('/webhook/github/repo-a')
                 .send(JSON.stringify(payload))
                 .set('x-hub-signature-256', 'valid')
                 .set('Content-Type', 'application/json');
 
             expect(response.status).toBe(200);
-            expect(validateGitHubWebhook).toHaveBeenCalled();
-            expect(messageService.formatGitHubMessage).toHaveBeenCalledWith(payload);
-            expect(webhookService.sendToGoogleChat).toHaveBeenCalled();
+            expect(messageService.formatGoogleChatMessage).toHaveBeenCalledWith(payload, 'github');
+            expect(webhookService.sendSantetMessage).toHaveBeenCalled();
         });
     });
 
-    describe('POST /webhook/sentry', () => {
+    describe('POST /webhook/sentry/:sourceName', () => {
         it('should handle invalid Sentry payload', async () => {
             validateSentryWebhook.mockReturnValueOnce({ error: { message: 'Invalid payload' } });
             const response = await request(app)
-                .post('/webhook/sentry')
+                .post('/webhook/sentry/repo-a')
                 .send({})
                 .set('Content-Type', 'application/json');
 
@@ -146,14 +155,14 @@ describe('Webhook Routes', () => {
             };
 
             const response = await request(app)
-                .post('/webhook/sentry')
+                .post('/webhook/sentry/repo-a')
                 .send(payload)
                 .set('Content-Type', 'application/json');
 
             expect(response.status).toBe(200);
             expect(validateSentryWebhook).toHaveBeenCalledWith(payload);
-            expect(messageService.formatSentryMessage).toHaveBeenCalledWith(payload);
-            expect(webhookService.sendToGoogleChat).toHaveBeenCalled();
+            expect(messageService.formatGoogleChatMessage).toHaveBeenCalledWith(payload, 'sentry');
+            expect(webhookService.sendSantetMessage).toHaveBeenCalled();
         });
     });
 });

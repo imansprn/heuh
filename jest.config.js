@@ -1,5 +1,6 @@
 module.exports = {
     testEnvironment: 'node',
+    testPathIgnorePatterns: ['<rootDir>/.worktrees/', '<rootDir>/worktrees/'],
     coverageDirectory: 'coverage',
     collectCoverageFrom: ['src/**/*.js', '!src/index.js', '!src/config.js'],
     coverageReporters: ['text', 'lcov'],

@@ -31,6 +31,24 @@ const SENTRY_META = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const trunc = (str, max = 180) => (str && str.length > max ? `${str.slice(0, max)}…` : str || '');
+const toWib = iso => {
+    if (!iso) return null;
+    const normalizedIso = String(iso).replace(/(\.\d{3})\d+/, '$1');
+    const parsed = new Date(normalizedIso);
+    if (Number.isNaN(parsed.getTime())) return String(iso);
+    const formatted = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Jakarta',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+    })
+        .format(parsed)
+        .replace(',', '');
+    return `${formatted} WIB`;
+};
 
 const hexToRgba = hex => {
     const normalizedHex = hex.replace('#', '');
@@ -157,7 +175,7 @@ const buildPROpenedCard = ({ pull_request: pr, repository, sender }) => {
     const labels = (pr.labels ?? []).map(l => l.name).join(', ');
 
     return makeCard(`pr-opened-${pr.number}`, [
-        { widgets: [Header(repository.full_name, sender.avatar_url, meta, pr.html_url)] },
+        { widgets: [Header(repository.full_name, sender?.avatar_url ?? GITHUB_FAVICON, meta, pr.html_url)] },
         {
             widgets: [
                 prTitleWidget(pr.title),
@@ -192,7 +210,7 @@ const buildPROpenedCard = ({ pull_request: pr, repository, sender }) => {
 const buildPRMergedCard = ({ pull_request: pr, repository, sender }) => {
     const meta = GITHUB_META.merged;
     return makeCard(`pr-merged-${pr.number}`, [
-        { widgets: [Header(repository.full_name, sender.avatar_url, meta, pr.html_url)] },
+        { widgets: [Header(repository.full_name, sender?.avatar_url ?? GITHUB_FAVICON, meta, pr.html_url)] },
         {
             widgets: [
                 prTitleWidget(pr.title),
@@ -218,7 +236,7 @@ const buildPRMergedCard = ({ pull_request: pr, repository, sender }) => {
 const buildPRClosedCard = ({ pull_request: pr, repository, sender }) => {
     const meta = GITHUB_META.closed;
     return makeCard(`pr-closed-${pr.number}`, [
-        { widgets: [Header(repository.full_name, sender.avatar_url, meta, pr.html_url)] },
+        { widgets: [Header(repository.full_name, sender?.avatar_url ?? GITHUB_FAVICON, meta, pr.html_url)] },
         {
             widgets: [
                 prTitleWidget(pr.title),
@@ -239,7 +257,7 @@ const buildPRClosedCard = ({ pull_request: pr, repository, sender }) => {
 const buildReviewRequestedCard = ({ pull_request: pr, repository, sender, requested_reviewer }) => {
     const meta = GITHUB_META.review_requested;
     return makeCard(`pr-review-req-${pr.number}`, [
-        { widgets: [Header(repository.full_name, sender.avatar_url, meta, pr.html_url)] },
+        { widgets: [Header(repository.full_name, sender?.avatar_url ?? GITHUB_FAVICON, meta, pr.html_url)] },
         {
             widgets: [
                 prTitleWidget(pr.title),
@@ -267,7 +285,7 @@ const buildReviewSubmittedCard = ({ pull_request: pr, repository, sender, review
     const state = review?.state?.toLowerCase() ?? 'commented';
     const meta = GITHUB_META[state] ?? GITHUB_META.commented;
     return makeCard(`pr-review-${pr.number}`, [
-        { widgets: [Header(repository.full_name, sender.avatar_url, meta, pr.html_url)] },
+        { widgets: [Header(repository.full_name, sender?.avatar_url ?? GITHUB_FAVICON, meta, pr.html_url)] },
         {
             widgets: [
                 prTitleWidget(pr.title),
@@ -290,7 +308,7 @@ const buildReviewSubmittedCard = ({ pull_request: pr, repository, sender, review
 const buildSynchronizeCard = ({ pull_request: pr, repository, sender, after }) => {
     const meta = GITHUB_META.synchronize;
     return makeCard(`pr-sync-${pr.number}`, [
-        { widgets: [Header(repository.full_name, sender.avatar_url, meta, pr.html_url)] },
+        { widgets: [Header(repository.full_name, sender?.avatar_url ?? GITHUB_FAVICON, meta, pr.html_url)] },
         {
             widgets: [
                 prTitleWidget(pr.title),
@@ -313,7 +331,7 @@ const buildPRStateCard = (payload, actionKey) => {
     const { pull_request: pr, repository, sender } = payload;
     const meta = GITHUB_META[actionKey] ?? GITHUB_META.reopened;
     return makeCard(`pr-${actionKey}-${pr.number}`, [
-        { widgets: [Header(repository.full_name, sender.avatar_url, meta, pr.html_url)] },
+        { widgets: [Header(repository.full_name, sender?.avatar_url ?? GITHUB_FAVICON, meta, pr.html_url)] },
         {
             widgets: [prTitleWidget(pr.title), branchWidget(pr.head.ref, pr.base.ref)],
         },
@@ -363,49 +381,105 @@ const formatGitHubCard = payload => {
 //  SENTRY CARDS
 // ─────────────────────────────────────────────────────────────────────────────
 const formatSentryCard = payload => {
+    const issue = payload.data?.issue ?? {};
     const event = payload.event ?? payload.data?.event ?? {};
-    const project = payload.project ?? event.project ?? 'N/A';
+    const projectValue = payload.project ?? event.project ?? issue.project?.name ?? issue.project ?? 'N/A';
+    const project = typeof projectValue === 'string' ? projectValue : projectValue?.name ?? 'N/A';
     const level = (event.level ?? payload.level ?? 'unknown').toLowerCase();
-    const meta = SENTRY_META[level] ?? SENTRY_META.unknown;
+    const issueLevel = issue.level?.toLowerCase();
+    const normalizedLevel = issueLevel ?? level;
+    const meta = SENTRY_META[normalizedLevel] ?? SENTRY_META.unknown;
     const env = event.environment ?? payload.environment ?? 'N/A';
     const release = event.release ?? payload.release ?? 'N/A';
-    const culprit = event.culprit ?? payload.culprit ?? '';
-    const eventId = event.event_id ?? payload.event_id ?? 'N/A';
-    const occurrences = payload.times_seen ? `${payload.times_seen}x` : null;
-    const issueUrl = payload.url ?? event.web_url ?? '#';
+    const eventId = event.event_id ?? payload.event_id ?? issue.id ?? issue.shortId ?? 'N/A';
+    const occurrences = payload.times_seen ? `${payload.times_seen}x` : issue.count ? `${issue.count}x` : null;
+    const toSafeUrl = url => {
+        if (typeof url !== 'string' || !url.trim()) return null;
+        return /^https?:\/\//i.test(url) ? url : null;
+    };
+    const issueUrl =
+        toSafeUrl(payload.url) ??
+        toSafeUrl(event.web_url) ??
+        toSafeUrl(issue.web_url) ??
+        toSafeUrl(issue.permalink) ??
+        'https://sentry.io';
+    const projectUrl = issue.project_url ?? issue.project?.url ?? issue.url ?? null;
+    const sentryTitle = event.title ?? issue.title ?? 'Unknown error';
+    const issueShortId = issue.shortId ?? event.event_id ?? issue.id ?? eventId ?? 'N/A';
+    const status = issue.status ?? event.level ?? payload.level ?? 'N/A';
+    const substatus = issue.substatus ?? null;
+    const userCount = issue.userCount ?? null;
+    const firstSeen = toWib(issue.firstSeen) ?? toWib(event.dateCreated) ?? 'N/A';
+    const lastSeen = toWib(issue.lastSeen) ?? toWib(event.timestamp) ?? 'N/A';
+    const statusLabel = `${status}${substatus ? `/${substatus}` : ''}`;
+    const loweredStatus = statusLabel.toLowerCase();
+    const statusVisual =
+        loweredStatus.includes('resolved') && !loweredStatus.includes('unresolved')
+            ? { color: '#1a7f37', icon: '✔' }
+            : loweredStatus.includes('error') ||
+                loweredStatus.includes('failed') ||
+                loweredStatus.includes('unresolved')
+              ? { color: '#cf222e', icon: '✖' }
+              : { color: '#57606a', icon: '●' };
+    const leftColumnWidgets = [
+        { decoratedText: { topLabel: 'Issue', text: `<font color="#57606a"><b>${issueShortId}</b></font>` } },
+        { decoratedText: { topLabel: 'First seen', text: `<font color="#57606a">${firstSeen}</font>` } },
+    ];
+    const rightColumnWidgets = [
+        { decoratedText: { topLabel: 'Last seen', text: `<font color="#57606a">${lastSeen}</font>` } },
+    ];
 
     return makeCard(`sentry-${eventId}`, [
         { widgets: [Header(project, SENTRY_FAVICON, meta, issueUrl)] },
         {
             widgets: [
-                { decoratedText: { text: `<b>${event.title ?? 'Unknown error'}</b>`, wrapText: true } },
-                ...(culprit
-                    ? [
-                          {
-                              decoratedText: {
-                                  text: `<font color="#57606a">${trunc(culprit, 120)}</font>`,
-                                  wrapText: true,
-                              },
-                          },
-                      ]
-                    : []),
+                { decoratedText: { text: `<font color="#57606a"><b>${sentryTitle}</b></font>`, wrapText: true } },
+                { textParagraph: { text: ' ' } },
                 {
                     decoratedText: {
                         text: [
-                            `<font color="#57606a">Env: <b>${env}</b></font>`,
-                            release !== 'N/A' ? `<font color="#57606a">Release: <b>${release}</b></font>` : null,
-                            occurrences ? `<font color="#57606a">Seen: <b>${occurrences}</b></font>` : null,
+                            `<font color="#57606a">Env: ${env}</font>`,
+                            occurrences ? `<font color="#57606a">Seen: ${occurrences}</font>` : null,
+                            userCount !== null ? `<font color="#57606a">Users: ${userCount}</font>` : null,
+                            release !== 'N/A' ? `<font color="#57606a">Release: ${release}</font>` : null,
                         ]
                             .filter(Boolean)
                             .join('  •  '),
                     },
                 },
-                ...(event.message?.trim()
-                    ? [{ textParagraph: { text: `<i><font color="#57606a">${trunc(event.message)}</font></i>` } }]
-                    : []),
+                { textParagraph: { text: ' ' } },
+                {
+                    decoratedText: {
+                        text: `<font color="${statusVisual.color}"><b>${statusVisual.icon} ${statusLabel}</b></font>`,
+                    },
+                },
+                { textParagraph: { text: ' ' } },
+                {
+                    columns: {
+                        columnItems: [
+                            {
+                                horizontalSizeStyle: 'FILL_AVAILABLE_SPACE',
+                                verticalAlignment: 'TOP',
+                                widgets: leftColumnWidgets,
+                            },
+                            {
+                                horizontalSizeStyle: 'FILL_AVAILABLE_SPACE',
+                                verticalAlignment: 'TOP',
+                                widgets: rightColumnWidgets,
+                            },
+                       ],
+                    },
+                },
             ],
         },
-        { widgets: [btn([{ text: 'View in Sentry', url: issueUrl }])] },
+        {
+            widgets: [
+                btn([
+                    { text: 'View in Sentry', url: issueUrl },
+                    ...(projectUrl && projectUrl !== issueUrl ? [{ text: 'View Project', url: projectUrl }] : []),
+                ]),
+            ],
+        },
     ]);
 };
 

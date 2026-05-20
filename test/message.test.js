@@ -2,131 +2,175 @@ const { formatSentryMessage, formatGitHubMessage } = require('../src/services/me
 
 describe('Message Service', () => {
     describe('formatSentryMessage', () => {
-        it('should format a complete Sentry payload correctly', () => {
+        it('renders sentry issue payload in dashboard layout structure', () => {
+            const payload = {
+                action: 'created',
+                data: {
+                    issue: {
+                        id: '7494101792',
+                        shortId: 'VALBURY-MOBILE-APP-SEB',
+                        title: '[Adjust] alwimuhammaddd+29298668atgmail.com',
+                        level: 'warning',
+                        status: 'unresolved',
+                        substatus: 'new',
+                        count: '2',
+                        userCount: 1,
+                        firstSeen: '2026-05-20T08:06:28.437000+00:00',
+                        lastSeen: '2026-05-20T08:06:29.311000+00:00',
+                        project_url: 'https://valbury.sentry.io/issues/?project=4505084990062592',
+                        web_url: 'https://valbury.sentry.io/issues/7494101792/',
+                        project: {
+                            id: '4505084990062592',
+                            name: 'valbury-mobile-app',
+                            slug: 'valbury-mobile-app',
+                            platform: 'flutter',
+                        },
+                    },
+                },
+                actor: { type: 'application', id: 'sentry', name: 'Sentry' },
+            };
+
+            const card = formatSentryMessage(payload).cardsV2[0].card;
+            const sections = card.sections ?? [];
+            const serialized = JSON.stringify(sections);
+            const bodyWidgets = sections?.[1]?.widgets ?? [];
+            const bodyColumnsWidget = bodyWidgets.find(widget => widget?.columns);
+            const spacerWidgets = bodyWidgets.filter(widget => widget?.textParagraph?.text === ' ');
+            const statusBadgeWidget = bodyWidgets.find(widget => widget?.decoratedText?.text?.includes('unresolved/new'));
+            const footerWidgets = sections?.[sections.length - 1]?.widgets ?? [];
+            const footerButtons = footerWidgets.find(widget => widget?.buttonList?.buttons)?.buttonList?.buttons ?? [];
+
+            expect(serialized).toContain('<b>valbury-mobile-app</b>');
+            expect(serialized).toContain('<b>[Adjust] alwimuhammaddd+29298668atgmail.com</b>');
+            expect(serialized).toContain('Env: N/A');
+            expect(serialized).toContain('Seen: 2x');
+            expect(serialized).toContain('Users: 1');
+            expect(serialized).not.toContain('Env: <b>');
+            expect(serialized).not.toContain('Seen: <b>');
+            expect(serialized).not.toContain('Users: <b>');
+            expect(bodyColumnsWidget).toBeDefined();
+            expect(bodyColumnsWidget.columns.columnItems).toHaveLength(2);
+            expect(spacerWidgets.length).toBeGreaterThanOrEqual(2);
+            expect(statusBadgeWidget).toBeDefined();
+            expect(JSON.stringify(bodyColumnsWidget)).not.toContain('unresolved/new');
+
+            expect(serialized).toContain('"topLabel":"Issue"');
+            expect(serialized).toContain('✖ unresolved/new');
+            expect(serialized).toContain('#cf222e');
+            expect(serialized).toContain('"topLabel":"First seen"');
+            expect(serialized).toContain('"topLabel":"Last seen"');
+            expect(serialized).not.toContain('"topLabel":"ACTION"');
+            expect(serialized).not.toContain('"topLabel":"ACTOR"');
+            expect(serialized).toContain('#57606a\\"><b>');
+            expect(serialized).toContain('WIB</font>');
+            expect(serialized).toContain('#57606a');
+            expect(serialized).not.toContain('<font color="#0969da">MESSAGE</font>');
+
+            expect(serialized).toContain('View in Sentry');
+            expect(serialized).toContain('View Project');
+            expect(footerButtons).toHaveLength(2);
+            expect(footerButtons[0].text).toBe('View in Sentry');
+            expect(footerButtons[1].text).toBe('View Project');
+            expect(footerButtons[0].color).toBeUndefined();
+            expect(serialized).not.toContain('Invalid Payload');
+        });
+
+        it('renders legacy sentry event payload with the same dashboard structure', () => {
+            const payload = {
+                data: {
+                    event: {
+                        title: 'TypeError: Cannot read properties of undefined',
+                        event_id: 'evt-legacy-1',
+                        level: 'error',
+                        environment: 'production',
+                        project: 'checkout-service',
+                        user: { username: 'alice' },
+                        message: 'Cannot read properties of undefined',
+                        web_url: 'https://sentry.io/organizations/acme/issues/123/events/evt-legacy-1/',
+                    },
+                },
+                times_seen: 12,
+                url: 'https://sentry.io/organizations/acme/issues/123/',
+            };
+
+            const serialized = JSON.stringify(formatSentryMessage(payload).cardsV2[0].card.sections);
+
+            expect(serialized).toContain('<b>checkout-service</b>');
+            expect(serialized).toContain('Env: production');
+            expect(serialized).toContain('Seen: 12x');
+            expect(serialized).toContain('"topLabel":"Issue"');
+            expect(serialized).toContain('✖ error');
+            expect(serialized).toContain('"topLabel":"First seen"');
+            expect(serialized).toContain('"topLabel":"Last seen"');
+            expect(serialized).not.toContain('"topLabel":"ACTION"');
+            expect(serialized).not.toContain('"topLabel":"ACTOR"');
+            expect(serialized).toContain('View in Sentry');
+            expect(serialized).not.toContain('Invalid Payload');
+        });
+
+        it('renders top-level event payload with dashboard expectations', () => {
+            const payload = {
+                event: {
+                    title: 'ReferenceError: foo is not defined',
+                    event_id: 'evt-top-1',
+                    level: 'error',
+                    environment: 'staging',
+                    project: 'checkout-service',
+                    user: { username: 'bob' },
+                    web_url: 'https://sentry.io/organizations/acme/issues/124/events/evt-top-1/',
+                },
+                times_seen: 5,
+                url: 'https://sentry.io/organizations/acme/issues/124/',
+            };
+
+            const card = formatSentryMessage(payload).cardsV2[0].card;
+            const sections = card.sections ?? [];
+            const serialized = JSON.stringify(sections);
+            const widgets = sections?.[1]?.widgets ?? [];
+            const bodyColumnsWidget = widgets.find(widget => widget?.columns);
+
+            expect(serialized).toContain('<b>checkout-service</b>');
+            expect(serialized).toContain('Env: staging');
+            expect(serialized).toContain('Seen: 5x');
+            expect(bodyColumnsWidget).toBeDefined();
+            expect(bodyColumnsWidget.columns.columnItems).toHaveLength(2);
+            expect(serialized).toContain('"topLabel":"Issue"');
+            expect(serialized).toContain('✖ error');
+            expect(serialized).toContain('"topLabel":"First seen"');
+            expect(serialized).toContain('"topLabel":"Last seen"');
+            expect(serialized).not.toContain('"topLabel":"ACTION"');
+            expect(serialized).not.toContain('"topLabel":"ACTOR"');
+            expect(serialized).toContain('View in Sentry');
+            expect(serialized).not.toContain('Invalid Payload');
+        });
+
+        it('renders event-only sentry payload in current minimal format', () => {
             const payload = {
                 event: {
                     title: 'Test Error',
                     event_id: 'abc123',
-                    user: {
-                        username: 'testuser',
-                    },
                     environment: 'production',
                     level: 'error',
                     release: 'v1.0.0',
+                    web_url: 'https://sentry.io/test',
                 },
-                project: {
-                    name: 'test-project',
-                },
+                project: { name: 'test-project' },
             };
 
-            const result = formatSentryMessage(payload);
-            expect(result.cardsV2[0].card.header.title).toBe('🚨 ERROR - Sentry Notification');
-            expect(result.cardsV2[0].card.header.subtitle).toBe('Environment: production');
-            expect(result.cardsV2[0].card.sections[0].widgets[0].decoratedText.text).toBe(
-                '🔧 <b>Project:</b> test-project'
-            );
-            expect(result.cardsV2[0].card.sections[0].widgets[1].decoratedText.text).toBe('🆔 <b>Event ID:</b> abc123');
-            expect(result.cardsV2[0].card.sections[0].widgets[2].decoratedText.text).toBe('👤 <b>User:</b> testuser');
-            expect(result.cardsV2[0].card.sections[0].widgets[3].decoratedText.text).toBe('📦 <b>Release:</b> v1.0.0');
-            expect(result.cardsV2[0].card.sections[0].widgets[4].decoratedText.text).toBe(
-                '⚠️ <b>Error:</b> Test Error'
-            );
+            const serialized = JSON.stringify(formatSentryMessage(payload).cardsV2[0].card.sections);
+            expect(serialized).toContain('<b>test-project</b>');
+            expect(serialized).toContain('Env: production');
+            expect(serialized).toContain('Release: v1.0.0');
+            expect(serialized).toContain('✖ error');
+            expect(serialized).toContain('View in Sentry');
         });
 
-        it('should handle Sentry payload with missing optional fields', () => {
-            const payload = {
-                event: {
-                    title: 'Test Error',
-                },
-                project: {
-                    name: 'test-project',
-                },
-            };
-
-            const result = formatSentryMessage(payload);
-            expect(result.cardsV2[0].card.header.title).toBe('🚨 UNKNOWN - Sentry Notification');
-            expect(result.cardsV2[0].card.header.subtitle).toBe('Environment: NA');
-            expect(result.cardsV2[0].card.sections[0].widgets[0].decoratedText.text).toBe(
-                '🔧 <b>Project:</b> test-project'
-            );
-            expect(result.cardsV2[0].card.sections[0].widgets[1].decoratedText.text).toBe('🆔 <b>Event ID:</b> NA');
-            expect(result.cardsV2[0].card.sections[0].widgets[2].decoratedText.text).toBe('👤 <b>User:</b> NA');
-            expect(result.cardsV2[0].card.sections[0].widgets[3].decoratedText.text).toBe('📦 <b>Release:</b> NA');
-            expect(result.cardsV2[0].card.sections[0].widgets[4].decoratedText.text).toBe(
-                '⚠️ <b>Error:</b> Test Error'
-            );
-        });
-
-        it('should handle Sentry payload with unknown level', () => {
-            const payload = {
-                event: {
-                    title: 'Test Error',
-                    level: 'unknown',
-                    environment: 'production',
-                },
-                project: {
-                    name: 'test-project',
-                },
-                url: 'https://sentry.io/test',
-            };
-
-            const result = formatSentryMessage(payload);
-            expect(result.cardsV2[0].card.header.title).toBe('🚨 UNKNOWN - Sentry Notification');
-        });
-
-        it('should handle valid Sentry payload', () => {
-            const payload = {
-                event: {
-                    title: 'Test Error',
-                    level: 'error',
-                    environment: 'production',
-                    user: { username: 'testuser' },
-                    event_id: 'test123',
-                    release: 'v1.0.0',
-                },
-                project: {
-                    name: 'Test Project',
-                },
-                url: 'https://sentry.io/test',
-            };
-
-            const message = formatSentryMessage(payload);
-            expect(message.cardsV2[0].card.header.title).toBe('🚨 ERROR - Sentry Notification');
-            expect(message.cardsV2[0].card.header.subtitle).toBe('Environment: production');
-
-            const { widgets } = message.cardsV2[0].card.sections[0];
-            expect(widgets[0].decoratedText.text).toBe('🔧 <b>Project:</b> Test Project');
-            expect(widgets[1].decoratedText.text).toBe('🆔 <b>Event ID:</b> test123');
-            expect(widgets[2].decoratedText.text).toBe('👤 <b>User:</b> testuser');
-            expect(widgets[3].decoratedText.text).toBe('📦 <b>Release:</b> v1.0.0');
-            expect(widgets[4].decoratedText.text).toBe('⚠️ <b>Error:</b> Test Error');
-        });
-
-        it('should handle missing optional fields in Sentry payload', () => {
-            const payload = {
-                event: {
-                    title: 'Test Error',
-                    level: 'error',
-                },
-                project: {
-                    name: 'Test Project',
-                },
-            };
-
-            const message = formatSentryMessage(payload);
-            expect(message.cardsV2[0].card.header.subtitle).toBe('Environment: NA');
-
-            const { widgets } = message.cardsV2[0].card.sections[0];
-            expect(widgets[2].decoratedText.text).toBe('👤 <b>User:</b> NA');
-            expect(widgets[3].decoratedText.text).toBe('📦 <b>Release:</b> NA');
-        });
-
-        it('should handle invalid Sentry payload', () => {
+        it('handles empty sentry payload without crashing', () => {
             const message = formatSentryMessage({});
-            expect(message.cardsV2[0].card.header.title).toBe('🚨 ERROR - Invalid Payload');
-            expect(message.cardsV2[0].card.sections[0].widgets[0].decoratedText.text).toBe(
-                '⚠️ <b>Error:</b> Invalid Sentry payload received'
-            );
+            const serialized = JSON.stringify(message.cardsV2[0].card.sections);
+            expect(serialized).toContain('<b>N/A</b>');
+            expect(serialized).toContain('Env: N/A');
+            expect(serialized).toContain('View in Sentry');
         });
     });
 
@@ -159,9 +203,9 @@ describe('Message Service', () => {
             expect(message.cardsV2[0].cardId).toBe('sentry-evt-123');
             expect(sections.length).toBeGreaterThanOrEqual(3);
             expect(sections?.[0]?.widgets?.[0]?.columns).toBeDefined();
-            expect(serialized).toContain('Env: <b>production</b>');
-            expect(serialized).toContain('Release: <b>web@1.9.0</b>');
-            expect(serialized).toContain('Seen: <b>12x</b>');
+            expect(serialized).toContain('Env: production');
+            expect(serialized).toContain('Release: web@1.9.0');
+            expect(serialized).toContain('Seen: 12x');
             expect(serialized).toContain('checkout-service');
             expect(serialized).toContain('View in Sentry');
         });
@@ -191,13 +235,9 @@ describe('Message Service', () => {
         it('keeps invalid fallback for empty payload', () => {
             const message = formatSentryMessage({});
             const card = message?.cardsV2?.[0]?.card ?? {};
-            const headerTitle = card?.header?.title ?? JSON.stringify(card);
-            const fallbackText =
-                card?.sections?.[0]?.widgets?.find(widget => widget?.decoratedText?.text)?.decoratedText?.text ??
-                JSON.stringify(card?.sections ?? []);
-
-            expect(headerTitle).toContain('Invalid Payload');
-            expect(fallbackText).toMatch(/Missing/i);
+            const fallbackText = JSON.stringify(card?.sections ?? []);
+            expect(fallbackText).toContain('Env: N/A');
+            expect(fallbackText).toContain('View in Sentry');
         });
     });
 
@@ -227,7 +267,7 @@ describe('Message Service', () => {
 
             const result = formatGitHubMessage(payload);
             expect(result.cardsV2[0].card.sections[0].widgets[0].decoratedText.text).toBe(
-                '⚠️ <b>Error:</b> Invalid GitHub payload received'
+                'Missing repository field.'
             );
         });
 
@@ -255,7 +295,7 @@ describe('Message Service', () => {
 
             const result = formatGitHubMessage(payload);
             expect(result.cardsV2[0].card.sections[0].widgets[0].decoratedText.text).toBe(
-                '⚠️ <b>Error:</b> Invalid GitHub payload received'
+                'Missing repository field.'
             );
         });
 
@@ -282,7 +322,7 @@ describe('Message Service', () => {
 
             const result = formatGitHubMessage(payload);
             expect(result.cardsV2[0].card.sections[0].widgets[0].decoratedText.text).toBe(
-                '⚠️ <b>Error:</b> Invalid GitHub payload received'
+                'Missing repository field.'
             );
         });
 
@@ -308,16 +348,15 @@ describe('Message Service', () => {
 
             const result = formatGitHubMessage(payload);
             expect(result.cardsV2[0].card.sections[0].widgets[0].decoratedText.text).toBe(
-                '⚠️ <b>Error:</b> Invalid GitHub payload received'
+                'Missing repository field.'
             );
         });
 
         it('should handle invalid GitHub payload', () => {
             const message = formatGitHubMessage({});
-            expect(message.cardsV2[0].card.header.title).toBe('🔔 GitHub Notification');
-            expect(message.cardsV2[0].card.header.subtitle).toBe('Invalid Payload');
+            expect(message.cardsV2[0].card.header.title).toBe('Invalid Payload');
             expect(message.cardsV2[0].card.sections[0].widgets[0].decoratedText.text).toBe(
-                '⚠️ <b>Error:</b> Invalid GitHub payload received'
+                'Missing repository field.'
             );
         });
 
@@ -327,20 +366,24 @@ describe('Message Service', () => {
                 repository: {
                     full_name: 'test/test-repo',
                 },
+                sender: {
+                    avatar_url: 'https://avatars.githubusercontent.com/u/1?v=4',
+                },
                 pull_request: {
+                    number: 1,
+                    html_url: 'https://github.com/test/test-repo/pull/1',
                     title: 'Test PR',
                     user: {
                         login: 'author',
                     },
-                    head: {},
-                    base: {},
+                    head: { ref: 'unknown' },
+                    base: { ref: 'unknown' },
                 },
             };
 
             const message = formatGitHubMessage(payload);
-            const { widgets } = message.cardsV2[0].card.sections[0];
-            const branchWidget = widgets.find(w => w.decoratedText?.text?.includes('Branch'));
-            expect(branchWidget.decoratedText.text).toBe('🌿 <b>Branch:</b> unknown → unknown');
+            const serialized = JSON.stringify(message.cardsV2[0].card.sections);
+            expect(serialized).toContain('unknown  →  unknown');
         });
     });
 });

@@ -146,7 +146,7 @@ describe('Logging coverage', () => {
         jest.doMock('../src/config/logger.config', () => logger);
         jest.doMock('../src/services', () => ({
             messageService: { formatGoogleChatMessage: jest.fn() },
-            webhookService: { sendToGoogleChat: jest.fn() },
+            webhookService: { sendSantetMessage: jest.fn() },
             securityService: { rateLimit: jest.fn().mockReturnValue(true) },
         }));
         jest.doMock('../src/services/validation.service', () => ({
@@ -155,11 +155,19 @@ describe('Logging coverage', () => {
             validateSentryWebhook: jest.fn().mockReturnValue({ error: { message: 'invalid sentry payload' } }),
         }));
         jest.doMock('../src/encryption/encryption', () => ({ decrypt: jest.fn(v => v) }));
-        jest.doMock('../models', () => ({ WebhookSource: {}, Destination: {} }));
+        jest.doMock('../models', () => ({
+            WebhookSource: {
+                findOne: jest.fn().mockResolvedValue({
+                    config: {},
+                    destinations: [],
+                }),
+            },
+            Destination: {},
+        }));
 
         const { handleSentryWebhook } = require('../src/controllers/webhook.controller');
 
-        const req = { body: {}, ip: '127.0.0.1' };
+        const req = { params: { sourceName: 'sentry-source' }, headers: {}, body: {}, ip: '127.0.0.1' };
         const res = { status: jest.fn().mockReturnThis(), json: jest.fn() };
 
         await handleSentryWebhook(req, res);

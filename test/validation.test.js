@@ -93,5 +93,38 @@ describe('Validation Service', () => {
                 expect(result).toEqual({ error: null });
             });
         });
+
+        describe('validateSentryWebhook', () => {
+            it('should accept Sentry issue alert payload shape (data.issue)', () => {
+                const payload = {
+                    action: 'created',
+                    installation: { uuid: '021b1590-5af8-43d1-a342-ff6138aea725' },
+                    data: {
+                        issue: {
+                            id: '7494101792',
+                            shortId: 'VALBURY-MOBILE-APP-SEB',
+                            title: '[Adjust] alwimuhammaddd+29298668atgmail.com',
+                            level: 'warning',
+                            status: 'unresolved',
+                            count: '2',
+                            userCount: 1,
+                            firstSeen: '2026-05-20T08:06:28.437000+00:00',
+                            lastSeen: '2026-05-20T08:06:29.311000+00:00',
+                            web_url: 'https://valbury.sentry.io/issues/7494101792/',
+                            project: {
+                                id: '4505084990062592',
+                                name: 'valbury-mobile-app',
+                                slug: 'valbury-mobile-app',
+                                platform: 'flutter',
+                            },
+                        },
+                    },
+                    actor: { type: 'application', id: 'sentry', name: 'Sentry' },
+                };
+
+                const result = validationService.validateSentryWebhook(payload);
+                expect(result.error).toBeUndefined();
+            });
+        });
     });
 });

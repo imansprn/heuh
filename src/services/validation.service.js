@@ -4,23 +4,47 @@ const crypto = require('crypto');
 const ApiError = require('../utils/ApiError');
 const config = require('../config/index');
 
+const sentryEventSchema = Joi.object({
+    level: Joi.string().required(),
+    title: Joi.string().required(),
+    project: Joi.alternatives().try(Joi.string(), Joi.object().unknown(true)).required(),
+    event_id: Joi.string().required(),
+    user: Joi.object({
+        username: Joi.string(),
+        email: Joi.string().email(),
+    }).unknown(true),
+    release: Joi.string(),
+    web_url: Joi.string().uri().required(),
+    environment: Joi.string(),
+}).unknown(true);
+
+const sentryIssueSchema = Joi.object({
+    id: Joi.alternatives().try(Joi.string(), Joi.number()).required(),
+    shortId: Joi.string(),
+    title: Joi.string().required(),
+    level: Joi.string().required(),
+    status: Joi.string(),
+    web_url: Joi.string().uri().required(),
+    project: Joi.object({
+        id: Joi.alternatives().try(Joi.string(), Joi.number()),
+        name: Joi.string(),
+        slug: Joi.string(),
+        platform: Joi.string(),
+    }).unknown(true),
+}).unknown(true);
+
 const sentryWebhookSchema = Joi.object({
+    action: Joi.string(),
+    installation: Joi.object().unknown(true),
+    actor: Joi.object().unknown(true),
     data: Joi.object({
-        event: Joi.object({
-            level: Joi.string().required(),
-            title: Joi.string().required(),
-            project: Joi.string().required(),
-            event_id: Joi.string().required(),
-            user: Joi.object({
-                username: Joi.string(),
-                email: Joi.string().email(),
-            }),
-            release: Joi.string(),
-            web_url: Joi.string().uri().required(),
-            environment: Joi.string(),
-        }).required(),
-    }).required(),
-});
+        event: sentryEventSchema,
+        issue: sentryIssueSchema,
+    })
+        .or('event', 'issue')
+        .required()
+        .unknown(true),
+}).unknown(true);
 
 // Base schemas for common objects
 const userSchema = Joi.object({
