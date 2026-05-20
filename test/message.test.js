@@ -130,6 +130,78 @@ describe('Message Service', () => {
         });
     });
 
+    describe('formatSentryMessage (github-style concept)', () => {
+        it('renders rich multi-section sentry card for full payload', () => {
+            const payload = {
+                data: {
+                    event: {
+                        title: 'TypeError: Cannot read properties of undefined',
+                        event_id: 'evt-123',
+                        level: 'error',
+                        environment: 'production',
+                        release: 'web@1.9.0',
+                        project: 'checkout-service',
+                        user: { username: 'alice' },
+                        message: 'Cannot read properties of undefined at CheckoutButton.tsx:92',
+                        culprit: 'src/components/CheckoutButton.tsx in onSubmit',
+                        web_url: 'https://sentry.io/organizations/acme/issues/123/events/evt-123/',
+                    },
+                },
+                times_seen: 12,
+                url: 'https://sentry.io/organizations/acme/issues/123/',
+            };
+
+            const message = formatSentryMessage(payload);
+            const card = message?.cardsV2?.[0]?.card ?? {};
+            const sections = Array.isArray(card.sections) ? card.sections : [];
+            const serialized = JSON.stringify(sections);
+
+            expect(message.cardsV2[0].cardId).toBe('sentry-evt-123');
+            expect(sections.length).toBeGreaterThanOrEqual(3);
+            expect(sections?.[0]?.widgets?.[0]?.columns).toBeDefined();
+            expect(serialized).toContain('Env: <b>production</b>');
+            expect(serialized).toContain('Release: <b>web@1.9.0</b>');
+            expect(serialized).toContain('Seen: <b>12x</b>');
+            expect(serialized).toContain('checkout-service');
+            expect(serialized).toContain('View in Sentry');
+        });
+
+        it('omits optional evidence/context widgets when fields are missing', () => {
+            const payload = {
+                data: {
+                    event: {
+                        title: 'Unhandled rejection',
+                        event_id: 'evt-min',
+                        level: 'warning',
+                        web_url: 'https://sentry.io/organizations/acme/issues/999/events/evt-min/',
+                    },
+                },
+            };
+
+            const message = formatSentryMessage(payload);
+            const card = message?.cardsV2?.[0]?.card ?? {};
+            const serialized = JSON.stringify(card.sections ?? []);
+
+            expect(serialized).not.toContain('Seen: <b>');
+            expect(serialized).not.toContain('Release: <b>');
+            expect(serialized).toContain('Unhandled rejection');
+            expect(serialized).toContain('View in Sentry');
+        });
+
+        it('keeps invalid fallback for empty payload', () => {
+            const message = formatSentryMessage({});
+            const card = message?.cardsV2?.[0]?.card ?? {};
+            const headerTitle = card?.header?.title ?? JSON.stringify(card);
+            const fallbackText =
+                card?.sections?.[0]?.widgets?.find(widget => widget?.decoratedText?.text)?.decoratedText?.text ??
+                JSON.stringify(card?.sections ?? []);
+
+            expect(headerTitle).toContain('Invalid Payload');
+            expect(fallbackText).toMatch(/Missing/i);
+        });
+    });
+
+
     describe('formatGitHubMessage', () => {
         it('should handle review request with teams', () => {
             const payload = {
