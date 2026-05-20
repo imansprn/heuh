@@ -1,8 +1,8 @@
 const Joi = require('joi');
 const httpStatus = require('http-status');
+const crypto = require('crypto');
 const ApiError = require('../utils/ApiError');
 const config = require('../config/index');
-const crypto = require('crypto');
 
 const sentryWebhookSchema = Joi.object({
     data: Joi.object({
@@ -63,10 +63,12 @@ const pullRequestSchema = Joi.object({
     assignee: userSchema.allow(null),
     assignees: Joi.array().items(userSchema),
     requested_reviewers: Joi.array().items(userSchema),
-    labels: Joi.array().items(Joi.object({
-        name: Joi.string().required(),
-        color: Joi.string(),
-    })),
+    labels: Joi.array().items(
+        Joi.object({
+            name: Joi.string().required(),
+            color: Joi.string(),
+        })
+    ),
     head: Joi.object({
         ref: Joi.string().required(),
         sha: Joi.string().required(),
@@ -257,7 +259,7 @@ const validateSentryWebhook = payload => {
  */
 const validateGitHubWebhook = (payload, signature, customSecret) => {
     const secret = customSecret || config.github_webhook_secret;
-    
+
     if (!signature) {
         return { error: { message: 'Missing signature' } };
     }
@@ -268,20 +270,12 @@ const validateGitHubWebhook = (payload, signature, customSecret) => {
     }
 
     // Remove 'sha256=' prefix
-    const receivedSignature = signature.startsWith('sha256=') 
-        ? signature.replace('sha256=', '') 
-        : signature;
-    
-    const expectedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(payload)
-        .digest('hex');
+    const receivedSignature = signature.startsWith('sha256=') ? signature.replace('sha256=', '') : signature;
+
+    const expectedSignature = crypto.createHmac('sha256', secret).update(payload).digest('hex');
 
     try {
-        const isValid = crypto.timingSafeEqual(
-            Buffer.from(receivedSignature),
-            Buffer.from(expectedSignature)
-        );
+        const isValid = crypto.timingSafeEqual(Buffer.from(receivedSignature), Buffer.from(expectedSignature));
         return isValid ? { error: null } : { error: { message: 'Invalid signature' } };
     } catch (err) {
         return { error: { message: 'Invalid signature' } };
@@ -297,19 +291,19 @@ const validateGitHubPayload = payload => {
     if (!payload) {
         throw new ApiError(httpStatus.BAD_REQUEST, 'Missing payload', true);
     }
-    
+
     if (payload.zen) {
-        return true; 
+        return true;
     }
 
-   if (!payload.action && payload.commits) {
+    if (!payload.action && payload.commits) {
         const pushResult = pushSchema.validate(payload, { abortEarly: false });
         if (pushResult.error) {
             throw new ApiError(httpStatus.BAD_REQUEST, pushResult.error.details.map(d => d.message).join(', '), true);
         }
         return true; // Berhenti di sini kalau push valid
     }
-      
+
     // Check required fields
     if (!payload.action || !payload.pull_request || !payload.repository) {
         throw new ApiError(httpStatus.BAD_REQUEST, 'Missing required fields', true);
@@ -342,21 +336,14 @@ const validateGitHubPayload = payload => {
 
     const result = schema.validate(payload, { abortEarly: false });
     if (result.error) {
-        throw new ApiError(
-            httpStatus.BAD_REQUEST,
-            result.error.details.map(detail => detail.message).join(', '),
-            true
-        );
+        throw new ApiError(httpStatus.BAD_REQUEST, result.error.details.map(detail => detail.message).join(', '), true);
     }
 
     return true;
 };
-
 
 module.exports = {
     validateGitHubWebhook,
     validateGitHubPayload,
     validateSentryWebhook,
 };
-
-

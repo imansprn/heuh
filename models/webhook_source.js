@@ -1,22 +1,22 @@
 const { Model } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
-    class Destination extends Model {
+    class WebhookSource extends Model {
         static associate(models) {
             // Many-to-Many via WebhookMapping
-            Destination.belongsToMany(models.WebhookSource, {
+            WebhookSource.belongsToMany(models.Destination, {
                 through: models.WebhookMapping,
-                foreignKey: 'destinationId',
-                otherKey: 'sourceId',
-                as: 'sources',
+                foreignKey: 'sourceId',
+                otherKey: 'destinationId',
+                as: 'destinations',
             });
-            Destination.hasMany(models.WebhookMapping, {
-                foreignKey: 'destinationId',
+            WebhookSource.hasMany(models.WebhookMapping, {
+                foreignKey: 'sourceId',
                 as: 'mappings',
             });
         }
     }
-    Destination.init(
+    WebhookSource.init(
         {
             id: {
                 type: DataTypes.UUID,
@@ -25,7 +25,6 @@ module.exports = (sequelize, DataTypes) => {
             },
             name: DataTypes.STRING,
             type: DataTypes.STRING,
-            url: DataTypes.TEXT,
             enabled: {
                 type: DataTypes.BOOLEAN,
                 defaultValue: true,
@@ -37,10 +36,10 @@ module.exports = (sequelize, DataTypes) => {
         },
         {
             sequelize,
-            modelName: 'Destination',
-            tableName: 'destinations',
+            modelName: 'WebhookSource',
+            tableName: 'webhook_sources',
             underscored: true,
         }
     );
-    return Destination;
+    return WebhookSource;
 };

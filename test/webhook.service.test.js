@@ -1,31 +1,29 @@
 const { webhookService } = require('../src/services');
-const { config } = require('../src/config');
+const logger = require('../src/config/logger.config');
 
 // Mock config
 jest.mock('../src/config', () => ({
     config: {
-        google_chat_webhook_url: 'https://chat.googleapis.com/v1/spaces/test/messages',
+        google_chat_webhook_url: 'https://chat.googleapis.com/v1/spaces/fallback/messages',
         rate_limit: {
             window_ms: 1000,
             max_requests: 2,
         },
     },
 }));
+jest.mock('../src/config/logger.config', () => ({
+    warn: jest.fn(),
+    error: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn(),
+}));
 
 // Mock fetch
 global.fetch = jest.fn();
 
 describe('Webhook Service', () => {
-    let originalConsoleError;
-
     beforeEach(() => {
         jest.clearAllMocks();
-        originalConsoleError = console.error;
-        console.error = jest.fn();
-    });
-
-    afterEach(() => {
-        console.error = originalConsoleError;
     });
 
     describe('sendToGoogleChat', () => {
@@ -47,11 +45,12 @@ describe('Webhook Service', () => {
                 status: 200,
                 json: () => Promise.resolve({}),
             });
+            const overrideWebhookUrl = 'https://chat.googleapis.com/v1/spaces/test/messages';
 
-            const result = await webhookService.sendToGoogleChat(message);
+            const result = await webhookService.sendToGoogleChat(message, overrideWebhookUrl);
             expect(result).toBe(true);
             expect(global.fetch).toHaveBeenCalledWith(
-                config.google_chat_webhook_url,
+                overrideWebhookUrl,
                 expect.objectContaining({
                     method: 'POST',
                     headers: {
@@ -60,7 +59,7 @@ describe('Webhook Service', () => {
                     body: JSON.stringify(message),
                 })
             );
-            expect(console.error).not.toHaveBeenCalled();
+            expect(logger.error).not.toHaveBeenCalled();
         });
 
         it('should handle Google Chat API errors', async () => {
@@ -77,11 +76,12 @@ describe('Webhook Service', () => {
                 ],
             };
             global.fetch.mockRejectedValueOnce(new Error('API Error'));
+            const overrideWebhookUrl = 'https://chat.googleapis.com/v1/spaces/test/messages';
 
-            const result = await webhookService.sendToGoogleChat(message);
+            const result = await webhookService.sendToGoogleChat(message, overrideWebhookUrl);
             expect(result).toBe(false);
             expect(global.fetch).toHaveBeenCalledWith(
-                config.google_chat_webhook_url,
+                overrideWebhookUrl,
                 expect.objectContaining({
                     method: 'POST',
                     headers: {
@@ -90,26 +90,47 @@ describe('Webhook Service', () => {
                     body: JSON.stringify(message),
                 })
             );
-            expect(console.error).toHaveBeenCalledWith('Error sending message to Google Chat:', 'API Error');
+            expect(logger.error).toHaveBeenCalled();
         });
 
         it('should handle missing webhook URL', async () => {
-            const originalUrl = config.google_chat_webhook_url;
-            config.google_chat_webhook_url = null;
-
             const result = await webhookService.sendToGoogleChat('Test message');
             expect(result).toBe(false);
             expect(global.fetch).not.toHaveBeenCalled();
-            expect(console.error).not.toHaveBeenCalled();
+            expect(logger.warn).toHaveBeenCalled();
+        });
 
-            config.google_chat_webhook_url = originalUrl;
+        it('should not use GOOGLE_CHAT_WEBHOOK_URL fallback without override URL', async () => {
+            const result = await webhookService.sendToGoogleChat({ text: 'Test message' });
+
+            expect(result).toBe(false);
+            expect(global.fetch).not.toHaveBeenCalled();
         });
 
         it('should handle empty message', async () => {
             const result = await webhookService.sendToGoogleChat('');
             expect(result).toBe(false);
             expect(global.fetch).not.toHaveBeenCalled();
-            expect(console.error).not.toHaveBeenCalled();
+            expect(logger.warn).toHaveBeenCalled();
+        });
+
+        describe('sendSantetMessage', () => {
+            it('should send via webhook URL and return success', async () => {
+                const message = { text: 'hello' };
+                const overrideWebhookUrl = 'https://chat.googleapis.com/v1/spaces/custom/messages';
+                global.fetch.mockResolvedValueOnce({ ok: true });
+
+                const result = await webhookService.sendSantetMessage(message, null, overrideWebhookUrl);
+
+                expect(result).toBe(true);
+                expect(global.fetch).toHaveBeenCalledWith(
+                    overrideWebhookUrl,
+                    expect.objectContaining({
+                        method: 'POST',
+                        body: JSON.stringify(message),
+                    })
+                );
+            });
         });
     });
 });

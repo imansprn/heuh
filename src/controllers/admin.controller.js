@@ -1,5 +1,6 @@
 const { WebhookSource, Destination, WebhookMapping } = require('../../models');
-const { encrypt } = require('../Encryption/encryption');
+const { encrypt } = require('../encryption/encryption');
+const logger = require('../config/logger.config');
 
 // ── Encrypt sensitive fields before storing to DB ─────────────────────────────
 const encryptConfig = (config = {}) => {
@@ -13,7 +14,7 @@ const encryptConfig = (config = {}) => {
 const getSources = async (req, res) => {
     try {
         const sources = await WebhookSource.findAll({
-            include: [{ model: Destination, as: 'destinations' }]
+            include: [{ model: Destination, as: 'destinations' }],
         });
         // Return sanitized response — do not expose encrypted config to client
         const sanitized = sources.map(s => ({
@@ -25,6 +26,7 @@ const getSources = async (req, res) => {
         }));
         res.json(sanitized);
     } catch (err) {
+        logger.error('Admin getSources failed', { error: err.message });
         res.status(500).json({ error: err.message });
     }
 };
@@ -48,6 +50,7 @@ const createSource = async (req, res) => {
             enabled: source.enabled,
         });
     } catch (err) {
+        logger.error('Admin createSource failed', { error: err.message });
         res.status(400).json({ error: err.message });
     }
 };
@@ -58,6 +61,7 @@ const getDestinations = async (req, res) => {
         const destinations = await Destination.findAll();
         res.json(destinations);
     } catch (err) {
+        logger.error('Admin getDestinations failed', { error: err.message });
         res.status(500).json({ error: err.message });
     }
 };
@@ -67,6 +71,7 @@ const createDestination = async (req, res) => {
         const dest = await Destination.create(req.body);
         res.status(201).json(dest);
     } catch (err) {
+        logger.error('Admin createDestination failed', { error: err.message });
         res.status(400).json({ error: err.message });
     }
 };
@@ -77,6 +82,7 @@ const createMapping = async (req, res) => {
         const mapping = await WebhookMapping.create(req.body);
         res.status(201).json(mapping);
     } catch (err) {
+        logger.error('Admin createMapping failed', { error: err.message });
         res.status(400).json({ error: err.message });
     }
 };

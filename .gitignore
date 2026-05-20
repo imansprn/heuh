@@ -133,3 +133,4 @@ dist
 
 examples/client-dart/.dart_tool
 examples/client-dart/pubspec.lock
+.worktrees/

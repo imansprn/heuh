@@ -35,7 +35,11 @@ jest.mock('../src/services', () => ({
 }));
 
 const { messageService, webhookService, securityService } = require('../src/services');
-const { validateGitHubWebhook, validateGitHubPayload, validateSentryWebhook } = require('../src/services/validation.service');
+const {
+    validateGitHubWebhook,
+    validateGitHubPayload,
+    validateSentryWebhook,
+} = require('../src/services/validation.service');
 
 // Increase test timeout
 jest.setTimeout(30000);
@@ -72,7 +76,7 @@ describe('Webhook Routes', () => {
         server = app.listen(0);
     });
 
-    afterEach((done) => {
+    afterEach(done => {
         if (server) {
             server.close(done);
         } else {

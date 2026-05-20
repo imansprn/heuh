@@ -1,6 +1,6 @@
-const { AdminKey } = require('../models');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const { AdminKey } = require('../models');
 
 (async () => {
     try {
@@ -17,11 +17,11 @@ const crypto = require('crypto');
         const newKey = await AdminKey.create({
             name: keyName,
             keyHash: hash,
-            enabled: true
+            enabled: true,
         });
 
-        // 4. create a new format (heuh_v2_{id}.{plainKey}) 
-        const apiKey = `heuh${newKey.id}.${plainKey}`;
+        // 4. create a new format (santet_v2_{id}.{plainKey})
+        const apiKey = `santet${newKey.id}.${plainKey}`;
 
         console.log('\n--- Admin API Key Generated ---');
         console.log(`Name: ${keyName}`);
@@ -37,4 +37,3 @@ const crypto = require('crypto');
         process.exit(1);
     }
 })();
-

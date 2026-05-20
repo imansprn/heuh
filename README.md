@@ -1,11 +1,11 @@
-# Heuh - Sentry and GitHub Webhook Integration with Google Chat
+# Santet - Sentry and GitHub Webhook Integration with Google Chat
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Code Coverage](https://codecov.io/gh/imansprn/heuh/branch/main/graph/badge.svg)](https://codecov.io/gh/imansprn/heuh)
-[![Node.js CI](https://github.com/imansprn/heuh/actions/workflows/coverage.yml/badge.svg)](https://github.com/imansprn/heuh/actions/workflows/coverage.yml)
+[![Code Coverage](https://codecov.io/gh/imansprn/santet/branch/main/graph/badge.svg)](https://codecov.io/gh/imansprn/santet)
+[![Node.js CI](https://github.com/imansprn/santet/actions/workflows/coverage.yml/badge.svg)](https://github.com/imansprn/santet/actions/workflows/coverage.yml)
 [![Code Style](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
 
-Heuh is a Node.js application that integrates Sentry and GitHub webhooks with Google Chat, allowing you to receive notifications about errors and pull request reviews directly in your Google Chat space.
+Santet is a Node.js application that integrates Sentry and GitHub webhooks with Google Chat, allowing you to receive notifications about errors and pull request reviews directly in your Google Chat space.
 
 ## Features
 
@@ -46,8 +46,8 @@ Heuh is a Node.js application that integrates Sentry and GitHub webhooks with Go
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/gobliggg/heuh.git
-cd heuh
+git clone https://github.com/gobliggg/santet.git
+cd santet
 ```
 
 2. Install dependencies:
@@ -60,49 +60,46 @@ npm install
 cp .env.example .env
 ```
 
-4. Generate a secure **Encryption Key**:
-Run this command in your terminal and copy the 64-character result to `ENCRYPTION_KEY` in your `.env`:
+4. Generate a secure **Encryption Key** and set it in `.env`:
 ```bash
 node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
-5. Setup Database & Run Migrations:
+5. Create development and test databases:
+```bash
+createdb santet_dev
+createdb santet_test
+```
+
+6. Run migrations:
 ```bash
 npx sequelize-cli db:migrate
 ```
 
-6. Generate your first **Admin API Key**:
+7. Generate your first **Admin API Key**:
 ```bash
 npm run generate-admin-key "Your Name"
 ```
 *Note: Copy and save the plain API Key displayed in the terminal!*
 
 
-4. Update the `.env` file with your configuration:
+8. Use this minimal `.env` for local development:
 ```env
-# Required Configuration
-APP_ENV=development # (Options: development, test, production)
-APP_NAME=heuh
-ENCRYPTION_KEY=your_64_hex_chars_here
+# App
+APP_ENV=development
+APP_NAME=santet
+PORT=3000
+ENCRYPTION_KEY=your_64_hex_key
 
-# Database Configuration
+# Database
 DB_HOST=127.0.0.1
-DB_NAME=heuh_db
+DB_NAME=santet_dev
+DB_NAME_TEST=santet_test
 DB_USER=postgres
 DB_PASS=your_password
 DB_PORT=5432
 
-
-# Optional Configuration - Rate Limiting
-RATE_LIMIT_WINDOW_MS=900000  # Default: 900000 (15 minutes)
-RATE_LIMIT_MAX_REQUESTS=100  # Default: 100
-
-# Optional Configuration - Logging
-LOG_LEVEL=info  # Default: info (options: error, warn, info, debug)
-
-# Optional Configuration - Request Handling
-REQUEST_TIMEOUT=5000  # Default: 5000 (5 seconds)
-MAX_PAYLOAD_SIZE=102400  # Default: 102400 (100KB)
+# Google Chat destinations are configured via Admin API (destination.url)
 ```
 
 ## Usage
@@ -123,17 +120,16 @@ npm start
 
 Build the image:
 ```bash
-docker build -t heuh .
+docker build -t santet .
 ```
 
 Run the container:
 ```bash
 docker run -p 3000:3000 \
   -e APP_ENV=production \
-  -e GOOGLE_CHAT_WEBHOOK_URL=your_webhook_url \
   -e GITHUB_WEBHOOK_SECRET=your_secret \
   -e SENTRY_WEBHOOK_SECRET=your_secret \
-  heuh
+  santet
 ```
 
 Or use docker-compose:
@@ -147,11 +143,70 @@ docker-compose up
 # Run tests
 npm test
 
-# Run tests in watch mode
-npm run test:watch
-
 # Run tests with coverage
 npm run test:coverage
+```
+
+## First-time Admin Setup (Source + Destination + Mapping)
+
+After the app is running, set up one destination and one source so webhook delivery works.
+
+Base URL:
+```bash
+export BASE_URL="http://localhost:3000"
+```
+
+Admin key format:
+```text
+X-Admin-Key: santet<id>.<plain_key>
+```
+
+### 1. Create destination (Google Chat)
+```bash
+curl -X POST "$BASE_URL/admin/destinations" \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: santet<id>.<plain_key>" \
+  -d '{
+    "name": "team-room",
+    "type": "google_chat",
+    "url": "https://chat.googleapis.com/v1/spaces/XXX/messages?key=YYY&token=ZZZ",
+    "enabled": true
+  }'
+```
+
+### 2. Create source (GitHub)
+```bash
+curl -X POST "$BASE_URL/admin/sources" \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: santet<id>.<plain_key>" \
+  -d '{
+    "name": "repo-a",
+    "type": "github",
+    "path": "repo-a",
+    "enabled": true,
+    "config": {
+      "secret": "your_github_webhook_secret",
+      "githubToken": "ghp_xxx_optional"
+    }
+  }'
+```
+
+### 3. Get IDs
+```bash
+curl -H "X-Admin-Key: santet<id>.<plain_key>" "$BASE_URL/admin/sources"
+curl -H "X-Admin-Key: santet<id>.<plain_key>" "$BASE_URL/admin/destinations"
+```
+
+### 4. Create mapping (source -> destination)
+```bash
+curl -X POST "$BASE_URL/admin/mappings" \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-Key: santet<id>.<plain_key>" \
+  -d '{
+    "sourceId": "<source-uuid>",
+    "destinationId": "<destination-uuid>",
+    "enabled": true
+  }'
 ```
 
 ## API Documentation
@@ -172,9 +227,9 @@ The API documentation is available at `/docs` when the server is running. It pro
 2. Navigate to Webhooks
 3. Add a new webhook with the following URL:
 ```
-http://your-domain/webhook/sentry/:sourceName
+http://your-domain/webhook/sentry
 ```
-*(Replace :sourceName with the source name registered in the database)*
+*Current implementation does not use `:sourceName` for Sentry route.*
 
 ## Admin API Usage
 
@@ -182,24 +237,11 @@ The application provides a secure Admin API to manage webhook sources and destin
 
 ### Authentication
 All admin endpoints require an `X-Admin-Key` header.
-- **Header**: `X-Admin-Key: your_plain_admin_key`
+- **Header**: `X-Admin-Key: santet<id>.<plain_key>`
 
 ### 1. Create a Webhook Source
 **Endpoint**: `POST /admin/sources`
-
-**Example Body**:
-```json
-{
-  "name": "project-alpha",
-  "type": "github",
-  "path": "alpha-webhook",
-  "config": {
-    "secret": "your_webhook_secret",
-    "githubToken": "your_github_personal_access_token"
-  }
-}
-```
-*Note: `secret` and `githubToken` will be automatically encrypted at rest using AES-256-GCM.*
+*Example request is documented in **First-time Admin Setup (Source + Destination + Mapping)** above.*
 
 ### 2. List All Sources
 **Endpoint**: `GET /admin/sources`
@@ -217,16 +259,15 @@ All admin endpoints require an `X-Admin-Key` header.
 }
 ```
 
-
 ### GitHub Webhook
 
 1. Go to your GitHub repository settings
 2. Navigate to Webhooks
 3. Add a new webhook with the following URL:
 ```
-http://your-domain/webhook/github/:sourceName
+http://your-domain/webhook/github/repo-a
 ```
-*(Replace :sourceName with the source name registered in the database)*
+*`repo-a` must match the source `name` created in Admin API.*
 
 
 ## Security
@@ -268,34 +309,18 @@ Iman Suparman
 The following environment variables are used to configure the core application:
 
 ### Required Variables
+- `APP_ENV`: Main app environment selector (`development`, `test`, `production`).
 - `ENCRYPTION_KEY`: A 64-character hex key (32 bytes) used for AES-256-GCM encryption.
 - `DB_HOST`: PostgreSQL host address.
 - `DB_NAME`: PostgreSQL database name.
+- `DB_NAME_TEST`: PostgreSQL test database name.
 - `DB_USER`: PostgreSQL username.
 - `DB_PASS`: PostgreSQL password.
 
 ### Optional Variables
-- `APP_ENV`: Application environment (`development`, `test`, `production`).
 - `PORT`: Server port (default: 3000).
 - `LOG_LEVEL`: Logging level (default: `info`).
 - `RATE_LIMIT_WINDOW_MS`: Rate limit window (default: 15 minutes).
 - `RATE_LIMIT_MAX_REQUESTS`: Max requests per window (default: 100).
 
-You can set these variables in a `.env` file in the project root:
-
-```env
-# Core
-APP_ENV=development
-ENCRYPTION_KEY=your_64_hex_key
-
-# Database
-DB_HOST=127.0.0.1
-DB_NAME=heuh
-DB_USER=postgres
-DB_PASS=your_password
-DB_PORT=5432
-
-# Server
-PORT=3000
-LOG_LEVEL=info
-```
+For a ready-to-copy `.env` template, use the **Installation** section above.

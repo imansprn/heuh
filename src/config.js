@@ -2,7 +2,6 @@ require('dotenv').config();
 
 const config = {
     port: process.env.PORT || 3000,
-    google_chat_webhook_url: process.env.GOOGLE_CHAT_WEBHOOK_URL,
     github_webhook_secret: process.env.GITHUB_WEBHOOK_SECRET,
 
     // Rate limiting configuration with defaults
@@ -16,15 +15,5 @@ const config = {
     request_timeout: parseInt(process.env.REQUEST_TIMEOUT, 10) || 5000, // Default: 5 seconds
     max_payload_size: parseInt(process.env.MAX_PAYLOAD_SIZE, 10) || 102400, // Default: 100KB
 };
-
-// Validate required configurations only in production
-if (process.env.APP_ENV === 'production') {
-    const requiredConfigs = ['google_chat_webhook_url'];
-    const missingConfigs = requiredConfigs.filter(key => !config[key]);
-
-    if (missingConfigs.length > 0) {
-        console.warn(`Warning: Missing required configuration(s): ${missingConfigs.join(', ')}`);
-    }
-}
 
 module.exports = { config };
